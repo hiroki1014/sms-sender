@@ -1,14 +1,15 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
+import AppLayout from '@/components/AppLayout'
 import CsvInput from '@/components/CsvInput'
 import TemplateEditor from '@/components/TemplateEditor'
 import CountSlider from '@/components/CountSlider'
 import Preview from '@/components/Preview'
+import { Button, Alert, Card, CardBody } from '@/components/ui'
 import { parseCsv } from '@/lib/csv'
 import { replaceVariables } from '@/lib/template'
+import { PaperPlaneTilt, Flask, Phone, CaretDown } from '@phosphor-icons/react'
 
 interface SendResult {
   total: number
@@ -17,7 +18,6 @@ interface SendResult {
 }
 
 export default function DashboardClient() {
-  const router = useRouter()
   const [csvText, setCsvText] = useState('')
   const [template, setTemplate] = useState('')
   const [count, setCount] = useState(1)
@@ -28,26 +28,20 @@ export default function DashboardClient() {
 
   const parsed = useMemo(() => parseCsv(csvText), [csvText])
 
-  // CSVが変更されたら電話番号フィールドを自動検出
+  // Auto-detect phone field
   useMemo(() => {
     if (parsed.headers.length > 0 && !phoneField) {
-      // 「電話」「phone」「tel」を含むヘッダーを探す
       const phoneHeader = parsed.headers.find(
         (h) =>
           h.includes('電話') ||
           h.toLowerCase().includes('phone') ||
           h.toLowerCase().includes('tel')
       )
-      if (phoneHeader) {
-        setPhoneField(phoneHeader)
-      } else {
-        // 見つからなければ最初の列
-        setPhoneField(parsed.headers[0])
-      }
+      setPhoneField(phoneHeader || parsed.headers[0])
     }
   }, [parsed.headers, phoneField])
 
-  // 送信件数の上限をCSVの行数に合わせる
+  // Adjust count to CSV rows
   useMemo(() => {
     if (parsed.rows.length > 0 && count > parsed.rows.length) {
       setCount(parsed.rows.length)
@@ -55,12 +49,6 @@ export default function DashboardClient() {
       setCount(1)
     }
   }, [parsed.rows.length, count])
-
-  const handleLogout = async () => {
-    await fetch('/api/auth', { method: 'DELETE' })
-    router.push('/')
-    router.refresh()
-  }
 
   const handleSend = async (dryRun: boolean = false) => {
     setError('')
@@ -98,110 +86,97 @@ export default function DashboardClient() {
     }
   }
 
+  const canSend = parsed.rows.length > 0 && template.trim().length > 0
+
   return (
-    <div className="min-h-screen">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-xl font-bold text-gray-900">SMS一括送信</h1>
-          <div className="flex items-center gap-4">
-            <Link
-              href="/contacts"
-              className="text-sm text-blue-600 hover:text-blue-800"
-            >
-              顧客管理
-            </Link>
-            <Link
-              href="/logs"
-              className="text-sm text-blue-600 hover:text-blue-800"
-            >
-              送信ログ
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="text-sm text-gray-600 hover:text-gray-800"
-            >
-              ログアウト
-            </button>
-          </div>
+    <AppLayout
+      title="SMS送信"
+      subtitle={parsed.rows.length > 0 ? `${parsed.rows.length}件のデータを読み込み済み` : undefined}
+    >
+      <div className="max-w-3xl space-y-6">
+        <Card>
+          <CardBody className="space-y-6">
+            <CsvInput value={csvText} onChange={setCsvText} />
+
+            {parsed.headers.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-gray-400" />
+                  電話番号の列
+                </label>
+                <div className="relative">
+                  <select
+                    value={phoneField}
+                    onChange={(e) => setPhoneField(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded appearance-none cursor-pointer pr-8 transition-all duration-150 hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
+                  >
+                    {parsed.headers.map((header) => (
+                      <option key={header} value={header}>
+                        {header}
+                      </option>
+                    ))}
+                  </select>
+                  <CaretDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+            )}
+
+            <TemplateEditor
+              value={template}
+              onChange={setTemplate}
+              availableVariables={parsed.headers}
+            />
+
+            <CountSlider
+              value={count}
+              onChange={setCount}
+              max={parsed.rows.length}
+            />
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardBody>
+            <Preview
+              rows={parsed.rows}
+              template={template}
+              count={count}
+              phoneField={phoneField}
+            />
+          </CardBody>
+        </Card>
+
+        {error && <Alert variant="error">{error}</Alert>}
+
+        {result && (
+          <Alert variant="success" title="送信完了">
+            成功: {result.success}件 / 失敗: {result.failed}件 / 合計: {result.total}件
+          </Alert>
+        )}
+
+        <div className="flex gap-3">
+          <Button
+            variant="secondary"
+            onClick={() => handleSend(true)}
+            disabled={isSending || !canSend}
+            loading={isSending}
+            icon={<Flask className="w-4 h-4" />}
+            className="flex-1"
+          >
+            テスト送信
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => handleSend(false)}
+            disabled={isSending || !canSend}
+            loading={isSending}
+            icon={<PaperPlaneTilt className="w-4 h-4" />}
+            className="flex-1"
+          >
+            {count}件を送信
+          </Button>
         </div>
-      </header>
-
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="bg-white rounded-lg shadow-md p-6 space-y-6">
-          <CsvInput value={csvText} onChange={setCsvText} />
-
-          {parsed.headers.length > 0 && (
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
-                電話番号の列
-              </label>
-              <select
-                value={phoneField}
-                onChange={(e) => setPhoneField(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              >
-                {parsed.headers.map((header) => (
-                  <option key={header} value={header}>
-                    {header}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          <TemplateEditor
-            value={template}
-            onChange={setTemplate}
-            availableVariables={parsed.headers}
-          />
-
-          <CountSlider
-            value={count}
-            onChange={setCount}
-            max={parsed.rows.length}
-          />
-
-          <Preview
-            rows={parsed.rows}
-            template={template}
-            count={count}
-            phoneField={phoneField}
-          />
-
-          {error && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
-              {error}
-            </div>
-          )}
-
-          {result && (
-            <div className="p-4 bg-green-50 border border-green-200 rounded-md">
-              <h3 className="font-medium text-green-800">送信完了</h3>
-              <p className="text-sm text-green-700 mt-1">
-                成功: {result.success}件 / 失敗: {result.failed}件 / 合計:{' '}
-                {result.total}件
-              </p>
-            </div>
-          )}
-
-          <div className="flex gap-4">
-            <button
-              onClick={() => handleSend(true)}
-              disabled={isSending || parsed.rows.length === 0 || !template}
-              className="flex-1 py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSending ? '処理中...' : 'テスト送信（実際には送信しない）'}
-            </button>
-            <button
-              onClick={() => handleSend(false)}
-              disabled={isSending || parsed.rows.length === 0 || !template}
-              className="flex-1 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSending ? '送信中...' : `${count}件を送信`}
-            </button>
-          </div>
-        </div>
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   )
 }

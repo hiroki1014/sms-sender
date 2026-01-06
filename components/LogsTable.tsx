@@ -1,6 +1,9 @@
 'use client'
 
 import { SmsLog } from '@/lib/supabase'
+import { Badge } from '@/components/ui'
+import { Table, TableHead, TableBody, Th, Td, Tr } from '@/components/ui'
+import { CheckCircle, XCircle, ClockCounterClockwise } from '@phosphor-icons/react'
 
 interface LogsTableProps {
   logs: SmsLog[]
@@ -25,61 +28,51 @@ function maskPhone(phone: string): string {
 export default function LogsTable({ logs }: LogsTableProps) {
   if (logs.length === 0) {
     return (
-      <div className="p-8 text-center text-gray-500">
-        送信ログがありません
+      <div className="py-12 text-center">
+        <ClockCounterClockwise className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+        <p className="text-sm text-gray-500">送信ログがありません</p>
       </div>
     )
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
-          <tr>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              日時
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              電話番号
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              メッセージ
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              ステータス
-            </th>
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {logs.map((log) => (
-            <tr key={log.id} className="hover:bg-gray-50">
-              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                {log.sent_at ? formatDate(log.sent_at) : '-'}
-              </td>
-              <td className="px-4 py-3 whitespace-nowrap text-sm font-mono text-gray-900">
-                {maskPhone(log.phone_number)}
-              </td>
-              <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">
-                {log.message}
-              </td>
-              <td className="px-4 py-3 whitespace-nowrap">
-                {log.status === 'success' ? (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    成功
-                  </span>
-                ) : (
-                  <span
-                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"
-                    title={log.error_message || undefined}
-                  >
-                    失敗
-                  </span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Table>
+      <TableHead>
+        <tr>
+          <Th>日時</Th>
+          <Th>電話番号</Th>
+          <Th>メッセージ</Th>
+          <Th className="w-24">ステータス</Th>
+        </tr>
+      </TableHead>
+      <TableBody>
+        {logs.map((log) => (
+          <Tr key={log.id}>
+            <Td className="whitespace-nowrap text-gray-500 text-xs">
+              {log.sent_at ? formatDate(log.sent_at) : '-'}
+            </Td>
+            <Td mono className="whitespace-nowrap">
+              {maskPhone(log.phone_number)}
+            </Td>
+            <Td className="max-w-xs">
+              <span className="truncate-1 text-gray-600">{log.message}</span>
+            </Td>
+            <Td>
+              {log.status === 'success' ? (
+                <Badge variant="success">
+                  <CheckCircle className="w-3 h-3 mr-1" weight="fill" />
+                  成功
+                </Badge>
+              ) : (
+                <Badge variant="error" title={log.error_message || undefined}>
+                  <XCircle className="w-3 h-3 mr-1" weight="fill" />
+                  失敗
+                </Badge>
+              )}
+            </Td>
+          </Tr>
+        ))}
+      </TableBody>
+    </Table>
   )
 }

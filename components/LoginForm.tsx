@@ -2,6 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui'
+import { Alert } from '@/components/ui'
+import { LockKey, ArrowRight } from '@phosphor-icons/react'
 
 export default function LoginForm() {
   const [password, setPassword] = useState('')
@@ -38,36 +41,36 @@ export default function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div>
-        <label
-          htmlFor="password"
-          className="block text-sm font-medium text-gray-700"
-        >
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-1.5">
+        <label className="block text-sm font-medium text-gray-700">
           パスワード
         </label>
-        <input
-          id="password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          placeholder="パスワードを入力"
-          required
-        />
+        <div className="relative">
+          <LockKey className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full pl-9 pr-3 py-2.5 text-sm bg-white border border-gray-300 rounded transition-all duration-150 placeholder:text-gray-400 hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
+            placeholder="パスワードを入力"
+            required
+          />
+        </div>
       </div>
 
       {error && (
-        <div className="text-red-600 text-sm">{error}</div>
+        <Alert variant="error">{error}</Alert>
       )}
 
-      <button
+      <Button
         type="submit"
-        disabled={isLoading}
-        className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        loading={isLoading}
+        className="w-full h-10"
+        icon={!isLoading ? <ArrowRight className="w-4 h-4" /> : undefined}
       >
         {isLoading ? 'ログイン中...' : 'ログイン'}
-      </button>
+      </Button>
     </form>
   )
 }

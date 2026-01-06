@@ -1,8 +1,18 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import AppLayout from '@/components/AppLayout'
+import { Button, Badge, Alert, Card } from '@/components/ui'
+import { Table, TableHead, TableBody, Th, Td, Tr } from '@/components/ui'
+import {
+  Plus,
+  Funnel,
+  Prohibit,
+  Play,
+  Trash,
+  Users
+} from '@phosphor-icons/react'
 
 interface Contact {
   id: string
@@ -14,7 +24,6 @@ interface Contact {
 }
 
 export default function ContactsClient() {
-  const router = useRouter()
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -39,7 +48,6 @@ export default function ContactsClient() {
 
       setContacts(data.contacts)
 
-      // タグを収集
       const tags = new Set<string>()
       data.contacts.forEach((c: Contact) => c.tags.forEach(t => tags.add(t)))
       setAllTags(Array.from(tags).sort())
@@ -87,154 +95,137 @@ export default function ContactsClient() {
     }
   }
 
-  const handleLogout = async () => {
-    await fetch('/api/auth', { method: 'DELETE' })
-    router.push('/')
-    router.refresh()
-  }
-
   return (
-    <div className="min-h-screen">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-xl font-bold text-gray-900">顧客管理</h1>
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-sm text-blue-600 hover:text-blue-800">
-              SMS送信
-            </Link>
-            <Link href="/contacts/import" className="text-sm text-blue-600 hover:text-blue-800">
-              CSVインポート
-            </Link>
-            <Link href="/logs" className="text-sm text-blue-600 hover:text-blue-800">
-              送信ログ
-            </Link>
-            <button onClick={handleLogout} className="text-sm text-gray-600 hover:text-gray-800">
-              ログアウト
-            </button>
+    <AppLayout
+      title="顧客管理"
+      subtitle={`${contacts.length}件の顧客`}
+      actions={
+        <Link href="/contacts/import">
+          <Button variant="primary" icon={<Plus className="w-4 h-4" />}>
+            インポート
+          </Button>
+        </Link>
+      }
+    >
+      <Card>
+        {/* Filters */}
+        <div className="px-4 py-3 border-b border-gray-150 flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Funnel className="w-4 h-4 text-gray-400" />
+            <span className="text-sm text-gray-600">フィルター:</span>
           </div>
+
+          <select
+            value={selectedTag}
+            onChange={(e) => setSelectedTag(e.target.value)}
+            className="px-2.5 py-1.5 text-sm border border-gray-300 rounded hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
+          >
+            <option value="">すべてのタグ</option>
+            {allTags.map(tag => (
+              <option key={tag} value={tag}>{tag}</option>
+            ))}
+          </select>
+
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeOptedOut}
+              onChange={(e) => setIncludeOptedOut(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-accent-500 focus:ring-accent-400/20"
+            />
+            配信停止を含む
+          </label>
         </div>
-      </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        <div className="bg-white rounded-lg shadow-md p-6">
-          {/* フィルター */}
-          <div className="flex flex-wrap gap-4 mb-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">タグ</label>
-              <select
-                value={selectedTag}
-                onChange={(e) => setSelectedTag(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-              >
-                <option value="">すべて</option>
-                {allTags.map(tag => (
-                  <option key={tag} value={tag}>{tag}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-end">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={includeOptedOut}
-                  onChange={(e) => setIncludeOptedOut(e.target.checked)}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm text-gray-700">配信停止を含む</span>
-              </label>
-            </div>
-            <div className="flex-1" />
-            <div className="flex items-end">
-              <span className="text-sm text-gray-500">{contacts.length}件</span>
-            </div>
+        {error && (
+          <div className="p-4 border-b border-gray-150">
+            <Alert variant="error">{error}</Alert>
           </div>
+        )}
 
-          {error && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
-              {error}
-            </div>
-          )}
-
-          {loading ? (
-            <div className="text-center py-8 text-gray-500">読み込み中...</div>
-          ) : contacts.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              顧客がいません。
-              <Link href="/contacts/import" className="text-blue-600 hover:underline ml-1">
+        {loading ? (
+          <div className="py-12 text-center">
+            <div className="spinner mx-auto mb-3" />
+            <p className="text-sm text-gray-500">読み込み中...</p>
+          </div>
+        ) : contacts.length === 0 ? (
+          <div className="py-12 text-center">
+            <Users className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+            <p className="text-sm text-gray-500 mb-3">顧客がいません</p>
+            <Link href="/contacts/import">
+              <Button variant="secondary" size="sm" icon={<Plus className="w-4 h-4" />}>
                 CSVインポート
-              </Link>
-              から追加してください。
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">電話番号</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">名前</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">タグ</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">状態</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">登録日</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {contacts.map((contact) => (
-                    <tr key={contact.id} className={contact.opted_out ? 'bg-gray-50' : ''}>
-                      <td className="px-4 py-3 text-sm text-gray-900">{contact.phone_number}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{contact.name || '-'}</td>
-                      <td className="px-4 py-3 text-sm">
-                        <div className="flex flex-wrap gap-1">
-                          {contact.tags.map(tag => (
-                            <span key={tag} className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        {contact.opted_out ? (
-                          <span className="text-red-600">配信停止</span>
-                        ) : (
-                          <span className="text-green-600">有効</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-500">
-                        {new Date(contact.created_at).toLocaleDateString('ja-JP')}
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        <div className="flex gap-2">
-                          {contact.opted_out ? (
-                            <button
-                              onClick={() => handleOptOut(contact.id, false)}
-                              className="text-green-600 hover:text-green-800"
-                            >
-                              配信再開
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => handleOptOut(contact.id, true)}
-                              className="text-orange-600 hover:text-orange-800"
-                            >
-                              配信停止
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleDelete(contact.id)}
-                            className="text-red-600 hover:text-red-800"
-                          >
-                            削除
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
+              </Button>
+            </Link>
+          </div>
+        ) : (
+          <Table>
+            <TableHead>
+              <tr>
+                <Th>電話番号</Th>
+                <Th>名前</Th>
+                <Th>タグ</Th>
+                <Th>状態</Th>
+                <Th>登録日</Th>
+                <Th className="w-32">操作</Th>
+              </tr>
+            </TableHead>
+            <TableBody>
+              {contacts.map((contact) => (
+                <Tr key={contact.id} className={contact.opted_out ? 'bg-gray-50/50' : ''}>
+                  <Td mono>{contact.phone_number}</Td>
+                  <Td className="text-gray-900">{contact.name || '-'}</Td>
+                  <Td>
+                    <div className="flex flex-wrap gap-1">
+                      {contact.tags.map(tag => (
+                        <Badge key={tag} variant="accent">{tag}</Badge>
+                      ))}
+                    </div>
+                  </Td>
+                  <Td>
+                    {contact.opted_out ? (
+                      <Badge variant="error">配信停止</Badge>
+                    ) : (
+                      <Badge variant="success">有効</Badge>
+                    )}
+                  </Td>
+                  <Td className="text-xs text-gray-500">
+                    {new Date(contact.created_at).toLocaleDateString('ja-JP')}
+                  </Td>
+                  <Td>
+                    <div className="flex items-center gap-1">
+                      {contact.opted_out ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOptOut(contact.id, false)}
+                          icon={<Play className="w-4 h-4" />}
+                          title="配信再開"
+                        />
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOptOut(contact.id, true)}
+                          icon={<Prohibit className="w-4 h-4" />}
+                          title="配信停止"
+                        />
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(contact.id)}
+                        icon={<Trash className="w-4 h-4 text-error" />}
+                        title="削除"
+                      />
+                    </div>
+                  </Td>
+                </Tr>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Card>
+    </AppLayout>
   )
 }
