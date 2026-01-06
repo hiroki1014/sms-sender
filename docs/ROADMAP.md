@@ -12,17 +12,17 @@ SMS送信 → LP/相談予約ページ → コンサル成約
 
 ---
 
-## Phase 1: 配信リスト管理（優先度: 高）
+## Phase 1: 配信リスト管理 ✅ 完了
 
 ### 機能一覧
-| 機能 | 説明 |
-|------|------|
-| 顧客DB保存 | 顧客情報をSupabaseに永続化 |
-| タグ付け | base/yahoo/rakuten等でセグメント |
-| 配信停止管理 | オプトアウトした人を除外 |
-| 重複排除 | 同じ電話番号の重複登録を防止 |
-| 送信履歴紐付け | 顧客ごとの送信履歴を記録 |
-| CSVインポート | 既存リストを一括登録 |
+| 機能 | 説明 | 状況 |
+|------|------|------|
+| 顧客DB保存 | 顧客情報をSupabaseに永続化 | ✅ |
+| タグ付け | base/yahoo/rakuten等でセグメント | ✅ |
+| 配信停止管理 | オプトアウトした人を除外 | ✅ |
+| 重複排除 | 同じ電話番号の重複登録を防止 | ✅ |
+| 送信履歴紐付け | 顧客ごとの送信履歴を記録 | ⏳ 未実装 |
+| CSVインポート | 既存リストを一括登録 | ✅ |
 
 ### DBスキーマ
 
@@ -65,10 +65,10 @@ CREATE TABLE send_logs (
 ```
 
 ### UI追加
-- `/contacts` - 顧客一覧・管理画面
-- `/contacts/import` - CSVインポート画面
-- `/campaigns` - キャンペーン一覧
-- `/campaigns/new` - キャンペーン作成（現在のダッシュボードを発展）
+- `/contacts` - 顧客一覧・管理画面 ✅
+- `/contacts/import` - CSVインポート画面 ✅
+- `/campaigns` - キャンペーン一覧 ⏳
+- `/campaigns/new` - キャンペーン作成（現在のダッシュボードを発展） ⏳
 
 ### 実装ファイル
 ```
@@ -160,11 +160,25 @@ CREATE TABLE click_logs (
 
 ## 技術スタック（現状）
 - **Frontend**: Next.js 14 (App Router)
-- **Styling**: TailwindCSS
+- **Styling**: TailwindCSS + カスタムデザインシステム
 - **Database**: Supabase (PostgreSQL)
 - **SMS**: Twilio
 - **Hosting**: Vercel
 - **認証**: パスワード認証
+- **テスト**: Vitest + Testing Library
+
+## 完了済みの追加実装
+
+### テスト基盤 ✅
+- Vitest 設定
+- APIルートテスト（send-sms, auth, contacts, logs）
+- モック基盤（Supabase, Auth, Next.js headers）
+- テストファクトリ関数
+
+### UIリファクタリング ✅
+- AppLayout / Sidebar コンポーネント
+- 再利用可能UIコンポーネント（Button, Card, Table等）
+- 統一されたデザインシステム
 
 ---
 
