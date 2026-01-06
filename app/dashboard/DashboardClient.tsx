@@ -104,6 +104,12 @@ export default function DashboardClient() {
           <h1 className="text-xl font-bold text-gray-900">SMS一括送信</h1>
           <div className="flex items-center gap-4">
             <Link
+              href="/contacts"
+              className="text-sm text-blue-600 hover:text-blue-800"
+            >
+              顧客管理
+            </Link>
+            <Link
               href="/logs"
               className="text-sm text-blue-600 hover:text-blue-800"
             >
