@@ -5,10 +5,11 @@ let supabaseClient: SupabaseClient | null = null
 export function getSupabase(): SupabaseClient {
   if (!supabaseClient) {
     const url = process.env.SUPABASE_URL
-    const key = process.env.SUPABASE_ANON_KEY
+    // サーバーサイドではSecret Keyを使用（新しいSupabase認証モデル）
+    const key = process.env.SUPABASE_SECRET_KEY
 
     if (!url || !key) {
-      throw new Error('Supabase credentials are not configured')
+      throw new Error('Supabase credentials are not configured. Check SUPABASE_URL and SUPABASE_SECRET_KEY in .env.local')
     }
 
     supabaseClient = createClient(url, key)
