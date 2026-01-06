@@ -1,6 +1,7 @@
 'use client'
 
-import { CsvRow, replaceVariables } from '@/lib/csv'
+import { CsvRow } from '@/lib/csv'
+import { replaceVariables } from '@/lib/template'
 
 interface PreviewProps {
   rows: CsvRow[]

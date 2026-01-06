@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseCsv, replaceVariables, extractVariables } from '@/lib/csv'
+import { parseCsv } from '@/lib/csv'
 
 describe('parseCsv', () => {
   it('シンプルなCSVをパースできる', () => {
@@ -56,78 +56,5 @@ describe('parseCsv', () => {
     const result = parseCsv(csv)
 
     expect(result.rows).toHaveLength(2)
-  })
-})
-
-describe('replaceVariables', () => {
-  it('変数を置換できる', () => {
-    const template = '{{名前}}様、こんにちは'
-    const row = { 名前: '田中太郎' }
-
-    const result = replaceVariables(template, row)
-
-    expect(result).toBe('田中太郎様、こんにちは')
-  })
-
-  it('複数の変数を置換できる', () => {
-    const template = '{{名前}}様、{{商品}}のご案内です'
-    const row = { 名前: '田中太郎', 商品: 'ブランドバッグ' }
-
-    const result = replaceVariables(template, row)
-
-    expect(result).toBe('田中太郎様、ブランドバッグのご案内です')
-  })
-
-  it('存在しない変数はそのまま残す', () => {
-    const template = '{{名前}}様、{{存在しない}}です'
-    const row = { 名前: '田中太郎' }
-
-    const result = replaceVariables(template, row)
-
-    expect(result).toBe('田中太郎様、{{存在しない}}です')
-  })
-
-  it('英語の変数名も処理できる', () => {
-    const template = 'Hello {{name}}'
-    const row = { name: 'Tanaka' }
-
-    const result = replaceVariables(template, row)
-
-    expect(result).toBe('Hello Tanaka')
-  })
-
-  it('変数名の前後の空白を無視する', () => {
-    const template = '{{ 名前 }}様'
-    const row = { 名前: '田中太郎' }
-
-    const result = replaceVariables(template, row)
-
-    expect(result).toBe('田中太郎様')
-  })
-})
-
-describe('extractVariables', () => {
-  it('テンプレートから変数を抽出できる', () => {
-    const template = '{{名前}}様、{{商品}}のご案内です'
-
-    const result = extractVariables(template)
-
-    expect(result).toEqual(['名前', '商品'])
-  })
-
-  it('重複する変数は1つにまとめる', () => {
-    const template = '{{名前}}様、{{名前}}さんへ'
-
-    const result = extractVariables(template)
-
-    expect(result).toEqual(['名前'])
-  })
-
-  it('変数がない場合は空配列を返す', () => {
-    const template = 'こんにちは'
-
-    const result = extractVariables(template)
-
-    expect(result).toEqual([])
   })
 })

@@ -60,17 +60,3 @@ function parseCsvLine(line: string): string[] {
   result.push(current.trim())
   return result
 }
-
-export function replaceVariables(template: string, row: CsvRow): string {
-  // 日本語を含む変数名に対応: {{変数名}}
-  return template.replace(/\{\{([^}]+)\}\}/g, (match, key) => {
-    const trimmedKey = key.trim()
-    return row[trimmedKey] !== undefined ? row[trimmedKey] : match
-  })
-}
-
-export function extractVariables(template: string): string[] {
-  // 日本語を含む変数名に対応
-  const matches = template.match(/\{\{([^}]+)\}\}/g) || []
-  return Array.from(new Set(matches.map(m => m.slice(2, -2).trim())))
-}

@@ -7,7 +7,8 @@ import CsvInput from '@/components/CsvInput'
 import TemplateEditor from '@/components/TemplateEditor'
 import CountSlider from '@/components/CountSlider'
 import Preview from '@/components/Preview'
-import { parseCsv, replaceVariables } from '@/lib/csv'
+import { parseCsv } from '@/lib/csv'
+import { replaceVariables } from '@/lib/template'
 
 interface SendResult {
   total: number
