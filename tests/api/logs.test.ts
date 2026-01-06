@@ -1,11 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 
-// モックのインポート
+// モックのインポート（vi.mock() は名前付きインポート時に実行される）
 import '../mocks/next-headers'
 import { setAuthenticated, resetAuthMock } from '../mocks/auth'
-import '../mocks/auth'
 import { mockGetSmsLogs, resetSupabaseMock } from '../mocks/supabase'
-import '../mocks/supabase'
 
 // APIハンドラをインポート
 import { GET } from '@/app/api/logs/route'

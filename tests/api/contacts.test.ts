@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
-// モックのインポート
+// モックのインポート（vi.mock() は名前付きインポート時に実行される）
 import '../mocks/next-headers'
 import { setAuthenticated, resetAuthMock } from '../mocks/auth'
-import '../mocks/auth'
 import {
   setQueryResult,
   setQueryError,
@@ -12,7 +11,6 @@ import {
   resetSupabaseMock,
   getLastCalledTable,
 } from '../mocks/supabase'
-import '../mocks/supabase'
 
 // ファクトリ関数
 import { createContact, resetFixtureCounters } from '../fixtures'

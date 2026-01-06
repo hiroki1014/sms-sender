@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
-// モックのインポート
+// モックのインポート（vi.mock() は名前付きインポート時に実行される）
 import '../mocks/next-headers'
 import {
   mockVerifyPassword,
@@ -9,7 +9,6 @@ import {
   mockClearAuthCookie,
   resetAuthMock,
 } from '../mocks/auth'
-import '../mocks/auth'
 
 // APIハンドラをインポート
 import { POST, DELETE } from '@/app/api/auth/route'

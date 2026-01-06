@@ -1,12 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
-// モックのインポート（実際のモジュールより先に）
+// モックのインポート（vi.mock() は名前付きインポート時に実行される）
 import '../mocks/next-headers'
 import { setAuthenticated, resetAuthMock } from '../mocks/auth'
-import '../mocks/auth'
 import { mockSaveSmsLog, resetSupabaseMock } from '../mocks/supabase'
-import '../mocks/supabase'
 
 // sendSms のモック
 const mockSendSms = vi.fn()
