@@ -8,11 +8,12 @@ export interface ParsedCsv {
 }
 
 export function parseCsv(csvText: string): ParsedCsv {
-  const lines = csvText.trim().split('\n')
-
-  if (lines.length === 0) {
+  const trimmed = csvText.trim()
+  if (!trimmed) {
     return { headers: [], rows: [] }
   }
+
+  const lines = trimmed.split('\n')
 
   // ヘッダー行をパース
   const headers = parseCsvLine(lines[0])
