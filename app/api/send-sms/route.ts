@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthenticated } from '@/lib/auth'
 import { sendSms } from '@/lib/twilio'
-import { saveSmsLog } from '@/lib/supabase'
+import { saveSmsLog, getSupabase, ShortUrl } from '@/lib/supabase'
+import { replaceUrlsWithShortUrls } from '@/lib/url-shortener'
 
 interface Recipient {
   phone: string
@@ -53,6 +54,25 @@ export async function POST(request: NextRequest) {
         continue
       }
 
+      // メッセージ内のURLを短縮URLに置換
+      let processedMessage = recipient.message
+      let shortUrls: ShortUrl[] = []
+
+      if (!dryRun) {
+        try {
+          const urlResult = await replaceUrlsWithShortUrls({
+            message: recipient.message,
+            contactId: recipient.contact_id,
+            campaignId,
+          })
+          processedMessage = urlResult.processedMessage
+          shortUrls = urlResult.shortUrls
+        } catch (urlError) {
+          console.error('Failed to process URLs:', urlError)
+          // URL処理に失敗しても送信は継続（元のメッセージを使用）
+        }
+      }
+
       if (dryRun) {
         // ドライラン: 実際には送信しない
         successCount++
@@ -63,8 +83,8 @@ export async function POST(request: NextRequest) {
         continue
       }
 
-      // 実際に送信
-      const result = await sendSms(recipient.phone, recipient.message)
+      // 実際に送信（短縮URL置換済みのメッセージ）
+      const result = await sendSms(recipient.phone, processedMessage)
 
       if (result.success) {
         successCount++
@@ -73,15 +93,28 @@ export async function POST(request: NextRequest) {
           success: true,
         })
 
-        // ログを保存
+        // ログを保存してsms_log_idを取得
         try {
-          await saveSmsLog({
-            phone_number: recipient.phone,
-            message: recipient.message,
-            status: 'success',
-            contact_id: recipient.contact_id || null,
-            campaign_id: campaignId || null,
-          })
+          const supabase = getSupabase()
+          const { data: logData } = await supabase
+            .from('sms_logs')
+            .insert([{
+              phone_number: recipient.phone,
+              message: processedMessage,
+              status: 'success',
+              contact_id: recipient.contact_id || null,
+              campaign_id: campaignId || null,
+            }])
+            .select('id')
+            .single()
+
+          // 短縮URLとsms_logを紐付け
+          if (logData && shortUrls.length > 0) {
+            await supabase
+              .from('short_urls')
+              .update({ sms_log_id: logData.id })
+              .in('id', shortUrls.map(s => s.id))
+          }
         } catch (logError) {
           console.error('Failed to save log:', logError)
         }
@@ -97,7 +130,7 @@ export async function POST(request: NextRequest) {
         try {
           await saveSmsLog({
             phone_number: recipient.phone,
-            message: recipient.message,
+            message: processedMessage,
             status: 'failed',
             error_message: result.error,
             contact_id: recipient.contact_id || null,

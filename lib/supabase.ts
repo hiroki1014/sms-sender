@@ -38,6 +38,24 @@ export interface Campaign {
   created_at?: string
 }
 
+export interface ShortUrl {
+  id?: string
+  code: string
+  original_url: string
+  sms_log_id?: string | null
+  contact_id?: string | null
+  campaign_id?: string | null
+  created_at?: string
+}
+
+export interface ClickLog {
+  id?: string
+  short_url_id: string
+  clicked_at?: string
+  user_agent?: string | null
+  ip_address?: string | null
+}
+
 export async function saveSmsLog(log: Omit<SmsLog, 'id' | 'sent_at'>): Promise<void> {
   const supabase = getSupabase()
 
