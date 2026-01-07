@@ -11,7 +11,11 @@ import {
   Prohibit,
   Play,
   Trash,
-  Users
+  Users,
+  Tag,
+  X,
+  Check,
+  FloppyDisk
 } from '@phosphor-icons/react'
 
 interface Contact {
@@ -30,6 +34,9 @@ export default function ContactsClient() {
   const [selectedTag, setSelectedTag] = useState('')
   const [includeOptedOut, setIncludeOptedOut] = useState(false)
   const [allTags, setAllTags] = useState<string[]>([])
+  const [editingContactId, setEditingContactId] = useState<string | null>(null)
+  const [editingTags, setEditingTags] = useState<string[]>([])
+  const [newTag, setNewTag] = useState('')
 
   const fetchContacts = async () => {
     setLoading(true)
@@ -93,6 +100,51 @@ export default function ContactsClient() {
     } catch {
       setError('削除に失敗しました')
     }
+  }
+
+  const handleEditTags = (contact: Contact) => {
+    setEditingContactId(contact.id)
+    setEditingTags([...contact.tags])
+    setNewTag('')
+  }
+
+  const handleCancelEdit = () => {
+    setEditingContactId(null)
+    setEditingTags([])
+    setNewTag('')
+  }
+
+  const handleSaveTags = async (id: string) => {
+    try {
+      const res = await fetch('/api/contacts', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, tags: editingTags }),
+      })
+
+      if (res.ok) {
+        setEditingContactId(null)
+        setEditingTags([])
+        setNewTag('')
+        fetchContacts()
+      } else {
+        setError('タグの更新に失敗しました')
+      }
+    } catch {
+      setError('タグの更新に失敗しました')
+    }
+  }
+
+  const handleAddTag = () => {
+    const trimmedTag = newTag.trim()
+    if (trimmedTag && !editingTags.includes(trimmedTag)) {
+      setEditingTags([...editingTags, trimmedTag])
+      setNewTag('')
+    }
+  }
+
+  const handleRemoveTag = (tag: string) => {
+    setEditingTags(editingTags.filter(t => t !== tag))
   }
 
   return (
@@ -176,11 +228,46 @@ export default function ContactsClient() {
                   <Td mono>{contact.phone_number}</Td>
                   <Td className="text-gray-900">{contact.name || '-'}</Td>
                   <Td>
-                    <div className="flex flex-wrap gap-1">
-                      {contact.tags.map(tag => (
-                        <Badge key={tag} variant="accent">{tag}</Badge>
-                      ))}
-                    </div>
+                    {editingContactId === contact.id ? (
+                      <div className="flex flex-wrap items-center gap-1">
+                        {editingTags.map(tag => (
+                          <span
+                            key={tag}
+                            className="inline-flex items-center gap-0.5 px-2 py-0.5 text-xs font-medium bg-accent-100 text-accent-700 rounded"
+                          >
+                            {tag}
+                            <button
+                              onClick={() => handleRemoveTag(tag)}
+                              className="ml-0.5 hover:text-accent-900"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={newTag}
+                            onChange={(e) => setNewTag(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
+                            placeholder="タグ追加"
+                            className="w-20 px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:border-accent-400 focus:outline-none"
+                          />
+                          <button
+                            onClick={handleAddTag}
+                            className="p-0.5 text-gray-500 hover:text-accent-600"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {contact.tags.map(tag => (
+                          <Badge key={tag} variant="accent">{tag}</Badge>
+                        ))}
+                      </div>
+                    )}
                   </Td>
                   <Td>
                     {contact.opted_out ? (
@@ -194,30 +281,58 @@ export default function ContactsClient() {
                   </Td>
                   <Td>
                     <div className="flex items-center gap-1">
-                      {contact.opted_out ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleOptOut(contact.id, false)}
-                          icon={<Play className="w-4 h-4" />}
-                          title="配信再開"
-                        />
+                      {editingContactId === contact.id ? (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleSaveTags(contact.id)}
+                            icon={<FloppyDisk className="w-4 h-4 text-accent-600" />}
+                            title="保存"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleCancelEdit}
+                            icon={<X className="w-4 h-4" />}
+                            title="キャンセル"
+                          />
+                        </>
                       ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleOptOut(contact.id, true)}
-                          icon={<Prohibit className="w-4 h-4" />}
-                          title="配信停止"
-                        />
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditTags(contact)}
+                            icon={<Tag className="w-4 h-4" />}
+                            title="タグ編集"
+                          />
+                          {contact.opted_out ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleOptOut(contact.id, false)}
+                              icon={<Play className="w-4 h-4" />}
+                              title="配信再開"
+                            />
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleOptOut(contact.id, true)}
+                              icon={<Prohibit className="w-4 h-4" />}
+                              title="配信停止"
+                            />
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(contact.id)}
+                            icon={<Trash className="w-4 h-4 text-error" />}
+                            title="削除"
+                          />
+                        </>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(contact.id)}
-                        icon={<Trash className="w-4 h-4 text-error" />}
-                        title="削除"
-                      />
                     </div>
                   </Td>
                 </Tr>
