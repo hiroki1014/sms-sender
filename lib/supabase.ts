@@ -24,7 +24,18 @@ export interface SmsLog {
   message: string
   status: 'success' | 'failed'
   error_message?: string | null
+  contact_id?: string | null
+  campaign_id?: string | null
   sent_at?: string
+}
+
+export interface Campaign {
+  id?: string
+  name: string
+  message_template: string
+  status: 'draft' | 'sent' | 'scheduled'
+  sent_at?: string | null
+  created_at?: string
 }
 
 export async function saveSmsLog(log: Omit<SmsLog, 'id' | 'sent_at'>): Promise<void> {

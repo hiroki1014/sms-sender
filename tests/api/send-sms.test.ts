@@ -204,6 +204,8 @@ describe('POST /api/send-sms', () => {
         phone_number: '09012345678',
         message: 'test message',
         status: 'success',
+        contact_id: null,
+        campaign_id: null,
       })
     })
 
@@ -221,6 +223,8 @@ describe('POST /api/send-sms', () => {
         message: 'test message',
         status: 'failed',
         error_message: 'Network error',
+        contact_id: null,
+        campaign_id: null,
       })
     })
 

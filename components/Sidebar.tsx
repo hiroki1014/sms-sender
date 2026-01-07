@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  PaperPlaneTilt,
+  Megaphone,
+  Plus,
   Users,
   FileArrowUp,
   ClockCounterClockwise,
@@ -15,7 +16,8 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { href: '/dashboard', label: 'SMS送信', icon: PaperPlaneTilt },
+  { href: '/campaigns', label: 'キャンペーン', icon: Megaphone },
+  { href: '/campaigns/new', label: '新規作成', icon: Plus, indent: true },
   { href: '/contacts', label: '顧客管理', icon: Users },
   { href: '/contacts/import', label: 'インポート', icon: FileArrowUp, indent: true },
   { href: '/logs', label: '送信ログ', icon: ClockCounterClockwise },
@@ -36,10 +38,10 @@ export default function Sidebar({ onLogout }: SidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 px-2 py-3 space-y-0.5">
         {navItems.map((item) => {
-          const isActive = pathname === item.href ||
-            (item.href !== '/dashboard' && item.href !== '/contacts/import' && pathname.startsWith(item.href))
-          const Icon = item.icon
           const isIndented = 'indent' in item && item.indent
+          const isActive = pathname === item.href ||
+            (!isIndented && item.href !== '/campaigns' && pathname.startsWith(item.href))
+          const Icon = item.icon
 
           return (
             <Link

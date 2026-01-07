@@ -6,6 +6,7 @@ import { saveSmsLog } from '@/lib/supabase'
 interface Recipient {
   phone: string
   message: string
+  contact_id?: string
 }
 
 export async function POST(request: NextRequest) {
@@ -20,9 +21,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { recipients, dryRun } = body as {
+    const { recipients, dryRun, campaignId } = body as {
       recipients: Recipient[]
       dryRun?: boolean
+      campaignId?: string
     }
 
     if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
@@ -77,6 +79,8 @@ export async function POST(request: NextRequest) {
             phone_number: recipient.phone,
             message: recipient.message,
             status: 'success',
+            contact_id: recipient.contact_id || null,
+            campaign_id: campaignId || null,
           })
         } catch (logError) {
           console.error('Failed to save log:', logError)
@@ -96,6 +100,8 @@ export async function POST(request: NextRequest) {
             message: recipient.message,
             status: 'failed',
             error_message: result.error,
+            contact_id: recipient.contact_id || null,
+            campaign_id: campaignId || null,
           })
         } catch (logError) {
           console.error('Failed to save log:', logError)

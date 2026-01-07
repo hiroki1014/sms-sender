@@ -1,8 +1,9 @@
-import type { SmsLog } from '@/lib/supabase'
+import type { SmsLog, Campaign } from '@/lib/supabase'
 import type { Contact } from '@/app/api/contacts/route'
 
 let contactIdCounter = 1
 let smsLogIdCounter = 1
+let campaignIdCounter = 1
 
 /**
  * テスト用のContact生成ファクトリ
@@ -56,9 +57,34 @@ export function createSmsLogs(count: number, overrides?: Partial<SmsLog>): SmsLo
 }
 
 /**
+ * テスト用のCampaign生成ファクトリ
+ */
+export function createCampaign(overrides?: Partial<Campaign>): Campaign {
+  const currentId = campaignIdCounter++
+
+  return {
+    id: String(currentId),
+    name: `Test Campaign ${currentId}`,
+    message_template: `Hello {{name}}! Message ${currentId}`,
+    status: 'draft',
+    sent_at: null,
+    created_at: new Date().toISOString(),
+    ...overrides,
+  }
+}
+
+/**
+ * 複数のCampaignを生成
+ */
+export function createCampaigns(count: number, overrides?: Partial<Campaign>): Campaign[] {
+  return Array.from({ length: count }, () => createCampaign(overrides))
+}
+
+/**
  * ファクトリのカウンターをリセット
  */
 export function resetFixtureCounters() {
   contactIdCounter = 1
   smsLogIdCounter = 1
+  campaignIdCounter = 1
 }
