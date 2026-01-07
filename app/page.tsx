@@ -7,7 +7,7 @@ export default async function LoginPage() {
   const authenticated = await isAuthenticated()
 
   if (authenticated) {
-    redirect('/dashboard')
+    redirect('/campaigns')
   }
 
   return (
