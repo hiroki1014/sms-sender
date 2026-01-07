@@ -8,6 +8,7 @@ import {
   Users,
   FileArrowUp,
   ClockCounterClockwise,
+  ChartBar,
   SignOut,
 } from '@phosphor-icons/react'
 
@@ -20,6 +21,7 @@ const navItems = [
   { href: '/campaigns/new', label: '新規作成', icon: Plus, indent: true },
   { href: '/contacts', label: '顧客管理', icon: Users },
   { href: '/contacts/import', label: 'インポート', icon: FileArrowUp, indent: true },
+  { href: '/analytics', label: '分析', icon: ChartBar },
   { href: '/logs', label: '送信ログ', icon: ClockCounterClockwise },
 ]
 
