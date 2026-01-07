@@ -25,6 +25,8 @@ interface Contact {
   tags: string[]
   opted_out: boolean
   created_at: string
+  send_count?: number
+  last_sent_at?: string | null
 }
 
 export default function ContactsClient() {
@@ -217,6 +219,7 @@ export default function ContactsClient() {
                 <Th>電話番号</Th>
                 <Th>名前</Th>
                 <Th>タグ</Th>
+                <Th>配信</Th>
                 <Th>状態</Th>
                 <Th>登録日</Th>
                 <Th className="w-32">操作</Th>
@@ -268,6 +271,16 @@ export default function ContactsClient() {
                         ))}
                       </div>
                     )}
+                  </Td>
+                  <Td>
+                    <div className="text-sm">
+                      <div className="text-gray-900">{contact.send_count || 0}回</div>
+                      {contact.last_sent_at && (
+                        <div className="text-xs text-gray-500">
+                          {new Date(contact.last_sent_at).toLocaleDateString('ja-JP')}
+                        </div>
+                      )}
+                    </div>
                   </Td>
                   <Td>
                     {contact.opted_out ? (

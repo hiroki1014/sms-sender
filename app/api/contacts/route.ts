@@ -11,6 +11,8 @@ export interface Contact {
   opted_out_at: string | null
   created_at: string
   updated_at: string
+  send_count?: number
+  last_sent_at?: string | null
 }
 
 // 顧客一覧取得
@@ -46,7 +48,37 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '顧客の取得に失敗しました' }, { status: 500 })
     }
 
-    return NextResponse.json({ contacts: data })
+    // 配信統計を取得
+    const contactIds = data?.map(c => c.id) || []
+    let sendStats: Record<string, { count: number; lastSentAt: string | null }> = {}
+
+    if (contactIds.length > 0) {
+      const { data: logsData } = await supabase
+        .from('sms_logs')
+        .select('contact_id, sent_at')
+        .in('contact_id', contactIds)
+        .order('sent_at', { ascending: false })
+
+      if (logsData) {
+        logsData.forEach(log => {
+          if (log.contact_id) {
+            if (!sendStats[log.contact_id]) {
+              sendStats[log.contact_id] = { count: 0, lastSentAt: log.sent_at }
+            }
+            sendStats[log.contact_id].count++
+          }
+        })
+      }
+    }
+
+    // 顧客データに配信統計をマージ
+    const contactsWithStats = data?.map(contact => ({
+      ...contact,
+      send_count: sendStats[contact.id]?.count || 0,
+      last_sent_at: sendStats[contact.id]?.lastSentAt || null,
+    })) || []
+
+    return NextResponse.json({ contacts: contactsWithStats })
   } catch (error) {
     console.error('Get contacts error:', error)
     return NextResponse.json({ error: '顧客の取得に失敗しました' }, { status: 500 })
