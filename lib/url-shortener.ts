@@ -14,39 +14,47 @@ export function extractUrls(message: string): string[] {
   return message.match(URL_REGEX) || []
 }
 
-// ユニークな短縮コードを生成（8文字）
+// ユニークな短縮コードを生成（6文字 = 約690億通り）
 export function generateShortCode(): string {
-  return nanoid(8)
+  return nanoid(6)
 }
 
-// 短縮URLを生成して保存
+// 短縮URLを生成して保存（UNIQUE 衝突時は最大3回リトライ）
 export async function createShortUrl(params: {
   originalUrl: string
   contactId?: string | null
   campaignId?: string | null
 }): Promise<ShortUrl> {
   const supabase = getSupabase()
-  const code = generateShortCode()
 
-  const shortUrl: Omit<ShortUrl, 'id' | 'created_at'> = {
-    code,
-    original_url: params.originalUrl,
-    contact_id: params.contactId || null,
-    campaign_id: params.campaignId || null,
-  }
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const code = generateShortCode()
 
-  const { data, error } = await supabase
-    .from('short_urls')
-    .insert([shortUrl])
-    .select()
-    .single()
+    const shortUrl: Omit<ShortUrl, 'id' | 'created_at'> = {
+      code,
+      original_url: params.originalUrl,
+      contact_id: params.contactId || null,
+      campaign_id: params.campaignId || null,
+    }
 
-  if (error) {
+    const { data, error } = await supabase
+      .from('short_urls')
+      .insert([shortUrl])
+      .select()
+      .single()
+
+    if (!error) return data
+
+    // UNIQUE violation (code collision) — Postgres error code 23505
+    if ((error as { code?: string }).code === '23505' && attempt < 2) {
+      continue
+    }
+
     console.error('Failed to create short URL:', error)
     throw error
   }
 
-  return data
+  throw new Error('Failed to generate unique short code after 3 attempts')
 }
 
 // 短縮URLをsms_log_idと紐付け
