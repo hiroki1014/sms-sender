@@ -12,8 +12,10 @@ import {
   X,
   CursorClick,
   Percent,
-  Envelope
+  Envelope,
+  ArrowsClockwise
 } from '@phosphor-icons/react'
+import { Button } from '@/components/ui'
 
 interface CampaignStats {
   campaign_id: string
@@ -53,6 +55,32 @@ export default function AnalyticsClient() {
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<{ scanned: number; updated: number; unchanged: number; failed: number } | null>(null)
+
+  const syncDeliveryStatus = async () => {
+    setSyncing(true)
+    setSyncResult(null)
+    try {
+      const res = await fetch('/api/admin/sync-delivery-status', { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) {
+        setError(json.error || '同期に失敗しました')
+      } else {
+        setSyncResult({
+          scanned: json.scanned,
+          updated: json.updated,
+          unchanged: json.unchanged,
+          failed: json.failed,
+        })
+        await fetchAnalytics()
+      }
+    } catch {
+      setError('同期に失敗しました')
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   const fetchAnalytics = async () => {
     setLoading(true)
@@ -81,10 +109,31 @@ export default function AnalyticsClient() {
     <AppLayout
       title="分析"
       subtitle="キャンペーンの効果測定"
+      actions={
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={syncDeliveryStatus}
+          disabled={syncing}
+          loading={syncing}
+          icon={<ArrowsClockwise className="w-4 h-4" />}
+          title="Twilio API から到達ステータスを再取得"
+        >
+          到達状態を同期
+        </Button>
+      }
     >
       {error && (
         <div className="mb-4">
           <Alert variant="error">{error}</Alert>
+        </div>
+      )}
+
+      {syncResult && (
+        <div className="mb-4">
+          <Alert variant="success">
+            同期完了: スキャン{syncResult.scanned} / 更新{syncResult.updated} / 変化なし{syncResult.unchanged} / 失敗{syncResult.failed}
+          </Alert>
         </div>
       )}
 
