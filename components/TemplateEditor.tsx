@@ -8,6 +8,25 @@ interface TemplateEditorProps {
   availableVariables: string[]
 }
 
+const URL_REGEX = /https?:\/\/[^\s]+/g
+
+// 短縮後URL長を推定（ベースURL + "/r/" + 6文字のコード）
+function getShortUrlLength(): number {
+  const base = (process.env.NEXT_PUBLIC_SHORT_URL_BASE || '').replace(/\/$/, '')
+  if (!base) return 11 // "/r/XXXXXX" 相対パス fallback
+  return base.length + 3 + 6
+}
+
+function computeEffectiveLength(text: string): { raw: number; effective: number; urlCount: number } {
+  const urls = text.match(URL_REGEX) || []
+  const shortLen = getShortUrlLength()
+  let effective = text.length
+  for (const url of urls) {
+    effective = effective - url.length + shortLen
+  }
+  return { raw: text.length, effective, urlCount: urls.length }
+}
+
 export default function TemplateEditor({
   value,
   onChange,
@@ -17,8 +36,8 @@ export default function TemplateEditor({
     onChange(value + `{{${variable}}}`)
   }
 
-  const charCount = value.length
-  const isLong = charCount > 70
+  const { raw, effective, urlCount } = computeEffectiveLength(value)
+  const isLong = effective > 70
 
   return (
     <div className="space-y-3">
@@ -28,7 +47,16 @@ export default function TemplateEditor({
           メッセージテンプレート
         </label>
         <span className={`text-xs ${isLong ? 'text-warning-dark' : 'text-gray-400'}`}>
-          {charCount}文字
+          {urlCount > 0 ? (
+            <>
+              {effective}文字
+              <span className="text-gray-400 ml-1">
+                (元 {raw} / URL短縮後)
+              </span>
+            </>
+          ) : (
+            <>{raw}文字</>
+          )}
           {isLong && ' (分割送信)'}
         </span>
       </div>
