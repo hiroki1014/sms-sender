@@ -179,19 +179,25 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
   }
 }
 
+interface RecipientDetail {
+  contact_id: string | null
+  phone_number: string
+  contact_name: string | null
+  send_status: 'success' | 'failed' | null
+  delivery_status: string | null
+  sent_at: string | null
+  error_message: string | null
+  click_count: number
+  first_clicked_at: string | null
+  last_clicked_at: string | null
+}
+
 async function getCampaignDetailStats(
   supabase: ReturnType<typeof getSupabase>,
   campaignId: string
 ): Promise<{
   campaign: CampaignStats
-  clicks_by_contact: Array<{
-    contact_id: string | null
-    phone_number: string
-    contact_name: string | null
-    click_count: number
-    first_clicked_at: string
-    last_clicked_at: string
-  }>
+  recipients: RecipientDetail[]
 }> {
   // キャンペーン情報
   const { data: campaign, error: campaignError } = await supabase
@@ -207,8 +213,9 @@ async function getCampaignDetailStats(
   // SMS送信統計
   const { data: smsLogs } = await supabase
     .from('sms_logs')
-    .select('id, status, contact_id, phone_number, delivery_status')
+    .select('id, status, contact_id, phone_number, delivery_status, sent_at, error_message')
     .eq('campaign_id', campaignId)
+    .order('sent_at', { ascending: false })
 
   const successCount = smsLogs?.filter(l => l.status === 'success').length || 0
   const failedCount = smsLogs?.filter(l => l.status === 'failed').length || 0
@@ -260,42 +267,40 @@ async function getCampaignDetailStats(
     }
   })
 
-  // 顧客ごとにまとめる
-  const clicksByContactMap = new Map<string | null, {
-    contact_id: string | null
-    phone_number: string
-    contact_name: string | null
-    click_count: number
-    first_clicked_at: string
-    last_clicked_at: string
-  }>()
-
+  // contact_id -> 集計クリック情報
+  const clicksPerContact = new Map<string, { count: number; first: string; last: string }>()
   shortUrls?.forEach(shortUrl => {
     const clickData = clicksByShortUrl.get(shortUrl.id)
-    if (clickData) {
-      const contact = contacts?.find(c => c.id === shortUrl.contact_id)
-      const smsLog = smsLogs?.find(l => l.contact_id === shortUrl.contact_id)
-      const key = shortUrl.contact_id || `unknown_${shortUrl.id}`
+    if (!clickData || !shortUrl.contact_id) return
+    const existing = clicksPerContact.get(shortUrl.contact_id)
+    if (existing) {
+      existing.count += clickData.count
+      if (clickData.first < existing.first) existing.first = clickData.first
+      if (clickData.last > existing.last) existing.last = clickData.last
+    } else {
+      clicksPerContact.set(shortUrl.contact_id, {
+        count: clickData.count,
+        first: clickData.first,
+        last: clickData.last,
+      })
+    }
+  })
 
-      const existing = clicksByContactMap.get(key)
-      if (existing) {
-        existing.click_count += clickData.count
-        if (clickData.first < existing.first_clicked_at) {
-          existing.first_clicked_at = clickData.first
-        }
-        if (clickData.last > existing.last_clicked_at) {
-          existing.last_clicked_at = clickData.last
-        }
-      } else {
-        clicksByContactMap.set(key, {
-          contact_id: shortUrl.contact_id,
-          phone_number: contact?.phone_number || smsLog?.phone_number || '不明',
-          contact_name: contact?.name || null,
-          click_count: clickData.count,
-          first_clicked_at: clickData.first,
-          last_clicked_at: clickData.last,
-        })
-      }
+  // 全受信者の行を構築（sms_logs 1件 = 1行、contact_idがあれば顧客情報と結合）
+  const recipients: RecipientDetail[] = (smsLogs || []).map(log => {
+    const contact = log.contact_id ? contacts?.find(c => c.id === log.contact_id) : null
+    const clickData = log.contact_id ? clicksPerContact.get(log.contact_id) : null
+    return {
+      contact_id: log.contact_id || null,
+      phone_number: log.phone_number,
+      contact_name: contact?.name || null,
+      send_status: log.status as 'success' | 'failed',
+      delivery_status: log.delivery_status || null,
+      sent_at: log.sent_at || null,
+      error_message: log.error_message || null,
+      click_count: clickData?.count || 0,
+      first_clicked_at: clickData?.first || null,
+      last_clicked_at: clickData?.last || null,
     }
   })
 
@@ -318,6 +323,6 @@ async function getCampaignDetailStats(
       unique_click_count: uniqueClickCount,
       click_rate: successCount > 0 ? Math.round((uniqueClickCount / successCount) * 100) : 0,
     },
-    clicks_by_contact: Array.from(clicksByContactMap.values()),
+    recipients,
   }
 }

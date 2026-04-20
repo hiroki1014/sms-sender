@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import AppLayout from '@/components/AppLayout'
 import { Alert, Card } from '@/components/ui'
 import { Table, TableHead, TableBody, Th, Td, Tr } from '@/components/ui'
@@ -112,7 +113,7 @@ export default function AnalyticsClient() {
               icon={<Envelope className="w-5 h-5" />}
               label="到達率"
               value={`${data.overall.overall_delivery_rate}%`}
-              subValue={`配信済 ${data.overall.total_delivered.toLocaleString()} / 待機 ${data.overall.total_pending.toLocaleString()} / 不達 ${data.overall.total_undelivered.toLocaleString()}`}
+              subValue={`配信済 ${data.overall.total_delivered.toLocaleString()} / 未確定 ${data.overall.total_pending.toLocaleString()} / 不達 ${data.overall.total_undelivered.toLocaleString()}`}
               color="text-success"
             />
             <StatCard
@@ -160,9 +161,12 @@ export default function AnalyticsClient() {
                   {data.campaigns.map((campaign) => (
                     <Tr key={campaign.campaign_id}>
                       <Td>
-                        <span className="font-medium text-gray-900">
+                        <Link
+                          href={`/analytics/${campaign.campaign_id}`}
+                          className="font-medium text-accent-600 hover:text-accent-700 hover:underline"
+                        >
                           {campaign.campaign_name}
-                        </span>
+                        </Link>
                       </Td>
                       <Td className="text-sm text-gray-500">
                         {campaign.sent_at
@@ -179,7 +183,7 @@ export default function AnalyticsClient() {
                         <span className="text-success">{campaign.delivered_count.toLocaleString()}</span>
                         {(campaign.pending_count > 0 || campaign.undelivered_count > 0) && (
                           <span className="text-xs text-gray-400 ml-1">
-                            (待{campaign.pending_count}/不達{campaign.undelivered_count})
+                            (未確定{campaign.pending_count}/不達{campaign.undelivered_count})
                           </span>
                         )}
                       </Td>
