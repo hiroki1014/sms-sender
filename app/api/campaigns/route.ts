@@ -46,20 +46,38 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, message_template, status } = body as Partial<Campaign>
+    const { name, message_template, status, sent_at, scheduled_at, recipients_snapshot } =
+      body as Partial<Campaign>
 
     if (!name || !message_template) {
       return NextResponse.json({ error: 'キャンペーン名とメッセージテンプレートが必要です' }, { status: 400 })
     }
 
+    if (status === 'scheduled') {
+      if (!scheduled_at) {
+        return NextResponse.json({ error: '予約日時が必要です' }, { status: 400 })
+      }
+      if (new Date(scheduled_at).getTime() <= Date.now()) {
+        return NextResponse.json({ error: '予約日時は未来の時刻を指定してください' }, { status: 400 })
+      }
+      if (!recipients_snapshot || !Array.isArray(recipients_snapshot) || recipients_snapshot.length === 0) {
+        return NextResponse.json({ error: '予約配信には送信先が必要です' }, { status: 400 })
+      }
+    }
+
     const supabase = getSupabase()
+    const insertData: Partial<Campaign> = {
+      name,
+      message_template,
+      status: status || 'draft',
+    }
+    if (sent_at !== undefined) insertData.sent_at = sent_at
+    if (scheduled_at !== undefined) insertData.scheduled_at = scheduled_at
+    if (recipients_snapshot !== undefined) insertData.recipients_snapshot = recipients_snapshot
+
     const { data, error } = await supabase
       .from('campaigns')
-      .insert([{
-        name,
-        message_template,
-        status: status || 'draft',
-      }])
+      .insert([insertData])
       .select()
       .single()
 

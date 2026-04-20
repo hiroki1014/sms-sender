@@ -46,6 +46,22 @@ export interface SendSmsResult {
   error?: string
 }
 
+function getStatusCallbackUrl(): string | undefined {
+  // 明示設定優先
+  if (process.env.TWILIO_STATUS_CALLBACK_URL) {
+    return process.env.TWILIO_STATUS_CALLBACK_URL
+  }
+  // Vercel デプロイ時は自動設定の VERCEL_URL から組み立てる
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}/api/twilio/status-callback`
+  }
+  // 本番 URL の明示設定
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')}/api/twilio/status-callback`
+  }
+  return undefined
+}
+
 export async function sendSms(to: string, message: string): Promise<SendSmsResult> {
   try {
     const client = getClient()
@@ -64,10 +80,13 @@ export async function sendSms(to: string, message: string): Promise<SendSmsResul
       }
     }
 
+    const statusCallback = getStatusCallbackUrl()
+
     const result = await client.messages.create({
       body: message,
       from: fromNumber,
       to: normalizedTo,
+      ...(statusCallback ? { statusCallback } : {}),
     })
 
     return {

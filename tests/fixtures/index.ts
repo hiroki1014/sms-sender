@@ -68,6 +68,9 @@ export function createCampaign(overrides?: Partial<Campaign>): Campaign {
     message_template: `Hello {{name}}! Message ${currentId}`,
     status: 'draft',
     sent_at: null,
+    scheduled_at: null,
+    recipients_snapshot: null,
+    last_error: null,
     created_at: new Date().toISOString(),
     ...overrides,
   }

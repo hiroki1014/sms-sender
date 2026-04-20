@@ -9,15 +9,17 @@ import {
   Plus,
   Funnel,
   Trash,
-  Megaphone
+  Megaphone,
+  XCircle
 } from '@phosphor-icons/react'
 
 interface Campaign {
   id: string
   name: string
   message_template: string
-  status: 'draft' | 'sent' | 'scheduled'
+  status: 'draft' | 'sent' | 'scheduled' | 'sending'
   sent_at: string | null
+  scheduled_at: string | null
   created_at: string
 }
 
@@ -25,12 +27,14 @@ const statusLabels: Record<Campaign['status'], string> = {
   draft: '下書き',
   sent: '送信済み',
   scheduled: '予約済み',
+  sending: '送信中',
 }
 
-const statusVariants: Record<Campaign['status'], 'warning' | 'success' | 'accent'> = {
+const statusVariants: Record<Campaign['status'], 'warning' | 'success' | 'accent' | 'default'> = {
   draft: 'warning',
   sent: 'success',
   scheduled: 'accent',
+  sending: 'default',
 }
 
 export default function CampaignsClient() {
@@ -77,6 +81,31 @@ export default function CampaignsClient() {
       setError('削除に失敗しました')
     }
   }
+
+  const handleCancel = async (id: string) => {
+    if (!confirm('この予約をキャンセルしますか？（キャンペーンは下書きに戻ります）')) return
+
+    try {
+      const res = await fetch(`/api/campaigns/${id}/cancel`, { method: 'POST' })
+      if (res.ok) {
+        fetchCampaigns()
+      } else {
+        const data = await res.json()
+        setError(data.error || 'キャンセルに失敗しました')
+      }
+    } catch {
+      setError('キャンセルに失敗しました')
+    }
+  }
+
+  const formatDateTime = (iso: string) =>
+    new Date(iso).toLocaleString('ja-JP', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
 
   return (
     <AppLayout
@@ -138,8 +167,8 @@ export default function CampaignsClient() {
                 <Th>キャンペーン名</Th>
                 <Th>ステータス</Th>
                 <Th>作成日</Th>
-                <Th>送信日</Th>
-                <Th className="w-24">操作</Th>
+                <Th>予約 / 送信日時</Th>
+                <Th className="w-32">操作</Th>
               </tr>
             </TableHead>
             <TableBody>
@@ -160,12 +189,23 @@ export default function CampaignsClient() {
                     {new Date(campaign.created_at).toLocaleDateString('ja-JP')}
                   </Td>
                   <Td className="text-sm text-gray-500">
-                    {campaign.sent_at
-                      ? new Date(campaign.sent_at).toLocaleDateString('ja-JP')
+                    {campaign.status === 'scheduled' && campaign.scheduled_at
+                      ? formatDateTime(campaign.scheduled_at)
+                      : campaign.sent_at
+                      ? formatDateTime(campaign.sent_at)
                       : '-'}
                   </Td>
                   <Td>
                     <div className="flex items-center gap-1">
+                      {campaign.status === 'scheduled' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleCancel(campaign.id)}
+                          icon={<XCircle className="w-4 h-4 text-warning" />}
+                          title="予約キャンセル"
+                        />
+                      )}
                       <Button
                         variant="ghost"
                         size="sm"

@@ -9,6 +9,10 @@ interface CampaignStats {
   total_sent: number
   success_count: number
   failed_count: number
+  delivered_count: number
+  undelivered_count: number
+  pending_count: number
+  delivery_rate: number
   click_count: number
   unique_click_count: number
   click_rate: number
@@ -19,9 +23,16 @@ interface OverallStats {
   total_sent: number
   total_success: number
   total_failed: number
+  total_delivered: number
+  total_undelivered: number
+  total_pending: number
+  overall_delivery_rate: number
   total_clicks: number
   overall_click_rate: number
 }
+
+const DELIVERED_STATUSES = new Set(['delivered', 'read'])
+const UNDELIVERED_STATUSES = new Set(['undelivered', 'failed', 'canceled'])
 
 export async function GET(request: NextRequest) {
   try {
@@ -68,6 +79,10 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
         total_sent: 0,
         total_success: 0,
         total_failed: 0,
+        total_delivered: 0,
+        total_undelivered: 0,
+        total_pending: 0,
+        overall_delivery_rate: 0,
         total_clicks: 0,
         overall_click_rate: 0,
       },
@@ -80,7 +95,7 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
   // SMS送信統計を取得
   const { data: smsLogs } = await supabase
     .from('sms_logs')
-    .select('campaign_id, status')
+    .select('campaign_id, status, delivery_status')
     .in('campaign_id', campaignIds)
 
   // クリック統計を取得（short_urlsとclick_logsをJOIN）
@@ -105,6 +120,15 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
     const failedCount = campaignLogs.filter(l => l.status === 'failed').length
     const totalSent = campaignLogs.length
 
+    // 到達率（Twilio Status Callback ベース）
+    const deliveredCount = campaignLogs.filter(
+      l => l.delivery_status && DELIVERED_STATUSES.has(l.delivery_status)
+    ).length
+    const undeliveredCount = campaignLogs.filter(
+      l => l.delivery_status && UNDELIVERED_STATUSES.has(l.delivery_status)
+    ).length
+    const pendingCount = successCount - deliveredCount - undeliveredCount
+
     // このキャンペーンのshort_urlsに紐づくクリック数
     const campaignShortUrlIds = shortUrls?.filter(s => s.campaign_id === campaign.id).map(s => s.id) || []
     const campaignClicks = clickLogs?.filter(c => campaignShortUrlIds.includes(c.short_url_id)) || []
@@ -118,6 +142,10 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
       total_sent: totalSent,
       success_count: successCount,
       failed_count: failedCount,
+      delivered_count: deliveredCount,
+      undelivered_count: undeliveredCount,
+      pending_count: Math.max(0, pendingCount),
+      delivery_rate: successCount > 0 ? Math.round((deliveredCount / successCount) * 100) : 0,
       click_count: clickCount,
       unique_click_count: uniqueClickCount,
       click_rate: successCount > 0 ? Math.round((uniqueClickCount / successCount) * 100) : 0,
@@ -128,6 +156,9 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
   const totalSent = campaignStats.reduce((sum, c) => sum + c.total_sent, 0)
   const totalSuccess = campaignStats.reduce((sum, c) => sum + c.success_count, 0)
   const totalFailed = campaignStats.reduce((sum, c) => sum + c.failed_count, 0)
+  const totalDelivered = campaignStats.reduce((sum, c) => sum + c.delivered_count, 0)
+  const totalUndelivered = campaignStats.reduce((sum, c) => sum + c.undelivered_count, 0)
+  const totalPending = campaignStats.reduce((sum, c) => sum + c.pending_count, 0)
   const totalClicks = campaignStats.reduce((sum, c) => sum + c.click_count, 0)
   const totalUniqueClicks = campaignStats.reduce((sum, c) => sum + c.unique_click_count, 0)
 
@@ -137,6 +168,10 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
       total_sent: totalSent,
       total_success: totalSuccess,
       total_failed: totalFailed,
+      total_delivered: totalDelivered,
+      total_undelivered: totalUndelivered,
+      total_pending: totalPending,
+      overall_delivery_rate: totalSuccess > 0 ? Math.round((totalDelivered / totalSuccess) * 100) : 0,
       total_clicks: totalClicks,
       overall_click_rate: totalSuccess > 0 ? Math.round((totalUniqueClicks / totalSuccess) * 100) : 0,
     },
@@ -172,11 +207,16 @@ async function getCampaignDetailStats(
   // SMS送信統計
   const { data: smsLogs } = await supabase
     .from('sms_logs')
-    .select('id, status, contact_id, phone_number')
+    .select('id, status, contact_id, phone_number, delivery_status')
     .eq('campaign_id', campaignId)
 
   const successCount = smsLogs?.filter(l => l.status === 'success').length || 0
   const failedCount = smsLogs?.filter(l => l.status === 'failed').length || 0
+  const deliveredCount =
+    smsLogs?.filter(l => l.delivery_status && DELIVERED_STATUSES.has(l.delivery_status)).length || 0
+  const undeliveredCount =
+    smsLogs?.filter(l => l.delivery_status && UNDELIVERED_STATUSES.has(l.delivery_status)).length || 0
+  const pendingCount = Math.max(0, successCount - deliveredCount - undeliveredCount)
 
   // 短縮URL情報
   const { data: shortUrls } = await supabase
@@ -270,6 +310,10 @@ async function getCampaignDetailStats(
       total_sent: (smsLogs?.length || 0),
       success_count: successCount,
       failed_count: failedCount,
+      delivered_count: deliveredCount,
+      undelivered_count: undeliveredCount,
+      pending_count: pendingCount,
+      delivery_rate: successCount > 0 ? Math.round((deliveredCount / successCount) * 100) : 0,
       click_count: clickCount,
       unique_click_count: uniqueClickCount,
       click_rate: successCount > 0 ? Math.round((uniqueClickCount / successCount) * 100) : 0,

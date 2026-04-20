@@ -18,6 +18,20 @@ export function getSupabase(): SupabaseClient {
   return supabaseClient
 }
 
+// Twilio Status Callback で通知される MessageStatus
+// https://www.twilio.com/docs/messaging/guides/webhook-request
+export type TwilioDeliveryStatus =
+  | 'queued'
+  | 'sending'
+  | 'sent'
+  | 'delivered'
+  | 'undelivered'
+  | 'failed'
+  | 'accepted'
+  | 'scheduled'
+  | 'read'
+  | 'canceled'
+
 export interface SmsLog {
   id?: string
   phone_number: string
@@ -26,15 +40,27 @@ export interface SmsLog {
   error_message?: string | null
   contact_id?: string | null
   campaign_id?: string | null
+  twilio_sid?: string | null
+  delivery_status?: TwilioDeliveryStatus | null
+  delivery_updated_at?: string | null
   sent_at?: string
+}
+
+export interface CampaignRecipient {
+  phone: string
+  message: string
+  contact_id?: string | null
 }
 
 export interface Campaign {
   id?: string
   name: string
   message_template: string
-  status: 'draft' | 'sent' | 'scheduled'
+  status: 'draft' | 'sent' | 'scheduled' | 'sending'
   sent_at?: string | null
+  scheduled_at?: string | null
+  recipients_snapshot?: CampaignRecipient[] | null
+  last_error?: string | null
   created_at?: string
 }
 

@@ -18,7 +18,9 @@ import {
   FloppyDisk,
   Users,
   FileText,
-  Funnel
+  Funnel,
+  Clock,
+  Lightning
 } from '@phosphor-icons/react'
 
 interface Contact {
@@ -35,6 +37,23 @@ interface SendResult {
 }
 
 type SourceType = 'csv' | 'contacts'
+type SendMode = 'immediate' | 'scheduled'
+
+// JST 現在時刻 + offsetMinutes を "YYYY-MM-DDTHH:mm" 形式で返す（datetime-local 用）
+function jstDatetimeLocal(offsetMinutes: number = 0): string {
+  const now = new Date(Date.now() + offsetMinutes * 60_000)
+  const jstMs = now.getTime() + 9 * 60 * 60_000
+  return new Date(jstMs).toISOString().slice(0, 16)
+}
+
+// "YYYY-MM-DDTHH:mm" (JST想定) を ISO 文字列(UTC) に変換
+function jstLocalToIso(value: string): string {
+  const [date, time] = value.split('T')
+  const [y, m, d] = date.split('-').map(Number)
+  const [hh, mm] = time.split(':').map(Number)
+  const utcMs = Date.UTC(y, m - 1, d, hh, mm) - 9 * 60 * 60_000
+  return new Date(utcMs).toISOString()
+}
 
 export default function CampaignFormClient() {
   const router = useRouter()
@@ -62,6 +81,10 @@ export default function CampaignFormClient() {
   const [isSaving, setIsSaving] = useState(false)
   const [result, setResult] = useState<SendResult | null>(null)
   const [error, setError] = useState('')
+
+  // Send mode (Phase 3: 予約送信)
+  const [sendMode, setSendMode] = useState<SendMode>('immediate')
+  const [scheduledLocal, setScheduledLocal] = useState(() => jstDatetimeLocal(60))
 
   // CSV parsing
   const parsed = useMemo(() => parseCsv(csvText), [csvText])
@@ -195,6 +218,53 @@ export default function CampaignFormClient() {
       setError('保存に失敗しました')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  // 予約送信（日時指定）
+  const handleSchedule = async () => {
+    if (!campaignName.trim()) {
+      setError('キャンペーン名を入力してください')
+      return
+    }
+    if (!scheduledLocal) {
+      setError('予約日時を入力してください')
+      return
+    }
+    const scheduledIso = jstLocalToIso(scheduledLocal)
+    if (new Date(scheduledIso).getTime() <= Date.now()) {
+      setError('予約日時は未来の時刻を指定してください')
+      return
+    }
+
+    setError('')
+    setResult(null)
+    setIsSending(true)
+
+    try {
+      const res = await fetch('/api/campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: campaignName,
+          message_template: template,
+          status: 'scheduled',
+          scheduled_at: scheduledIso,
+          recipients_snapshot: recipients,
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error || '予約に失敗しました')
+        return
+      }
+
+      router.push('/campaigns')
+    } catch {
+      setError('予約に失敗しました')
+    } finally {
+      setIsSending(false)
     }
   }
 
@@ -428,6 +498,59 @@ export default function CampaignFormClient() {
           </CardBody>
         </Card>
 
+        {/* Send Mode */}
+        <Card>
+          <CardBody className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">
+                送信タイミング
+              </label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSendMode('immediate')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded border transition-all ${
+                    sendMode === 'immediate'
+                      ? 'border-accent-400 bg-accent-50 text-accent-700'
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  <Lightning className="w-5 h-5" />
+                  <span className="text-sm font-medium">即時送信</span>
+                </button>
+                <button
+                  onClick={() => setSendMode('scheduled')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded border transition-all ${
+                    sendMode === 'scheduled'
+                      ? 'border-accent-400 bg-accent-50 text-accent-700'
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  <Clock className="w-5 h-5" />
+                  <span className="text-sm font-medium">日時指定</span>
+                </button>
+              </div>
+            </div>
+
+            {sendMode === 'scheduled' && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-gray-700">
+                  予約日時（JST）
+                </label>
+                <input
+                  type="datetime-local"
+                  value={scheduledLocal}
+                  onChange={(e) => setScheduledLocal(e.target.value)}
+                  min={jstDatetimeLocal(1)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded transition-all duration-150 hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
+                />
+                <p className="text-xs text-gray-500">
+                  Cron は5分ごとに実行されます。実送信は指定時刻から最大5分後になる可能性があります。
+                </p>
+              </div>
+            )}
+          </CardBody>
+        </Card>
+
         {error && <Alert variant="error">{error}</Alert>}
 
         {result && (
@@ -447,26 +570,41 @@ export default function CampaignFormClient() {
           >
             下書き保存
           </Button>
-          <Button
-            variant="secondary"
-            onClick={() => handleSend(true)}
-            disabled={isSending || !canSend}
-            loading={isSending}
-            icon={<Flask className="w-4 h-4" />}
-            className="flex-1"
-          >
-            テスト送信
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => handleSend(false)}
-            disabled={isSending || !canSend}
-            loading={isSending}
-            icon={<PaperPlaneTilt className="w-4 h-4" />}
-            className="flex-1"
-          >
-            {count}件を送信
-          </Button>
+          {sendMode === 'immediate' ? (
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => handleSend(true)}
+                disabled={isSending || !canSend}
+                loading={isSending}
+                icon={<Flask className="w-4 h-4" />}
+                className="flex-1"
+              >
+                テスト送信
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => handleSend(false)}
+                disabled={isSending || !canSend}
+                loading={isSending}
+                icon={<PaperPlaneTilt className="w-4 h-4" />}
+                className="flex-1"
+              >
+                {count}件を送信
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="primary"
+              onClick={handleSchedule}
+              disabled={isSending || !canSend}
+              loading={isSending}
+              icon={<Clock className="w-4 h-4" />}
+              className="flex-1"
+            >
+              {count}件を予約
+            </Button>
+          )}
         </div>
       </div>
     </AppLayout>

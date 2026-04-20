@@ -10,7 +10,8 @@ import {
   Check,
   X,
   CursorClick,
-  Percent
+  Percent,
+  Envelope
 } from '@phosphor-icons/react'
 
 interface CampaignStats {
@@ -20,6 +21,10 @@ interface CampaignStats {
   total_sent: number
   success_count: number
   failed_count: number
+  delivered_count: number
+  undelivered_count: number
+  pending_count: number
+  delivery_rate: number
   click_count: number
   unique_click_count: number
   click_rate: number
@@ -30,6 +35,10 @@ interface OverallStats {
   total_sent: number
   total_success: number
   total_failed: number
+  total_delivered: number
+  total_undelivered: number
+  total_pending: number
+  overall_delivery_rate: number
   total_clicks: number
   overall_click_rate: number
 }
@@ -96,15 +105,14 @@ export default function AnalyticsClient() {
               icon={<PaperPlaneTilt className="w-5 h-5" />}
               label="総送信数"
               value={data.overall.total_sent.toLocaleString()}
+              subValue={`成功 ${data.overall.total_success.toLocaleString()} / 失敗 ${data.overall.total_failed.toLocaleString()}`}
               color="text-accent-500"
             />
             <StatCard
-              icon={<Check className="w-5 h-5" />}
-              label="成功"
-              value={data.overall.total_success.toLocaleString()}
-              subValue={data.overall.total_sent > 0
-                ? `${Math.round((data.overall.total_success / data.overall.total_sent) * 100)}%`
-                : '0%'}
+              icon={<Envelope className="w-5 h-5" />}
+              label="到達率"
+              value={`${data.overall.overall_delivery_rate}%`}
+              subValue={`配信済 ${data.overall.total_delivered.toLocaleString()} / 待機 ${data.overall.total_pending.toLocaleString()} / 不達 ${data.overall.total_undelivered.toLocaleString()}`}
               color="text-success"
             />
             <StatCard
@@ -142,7 +150,8 @@ export default function AnalyticsClient() {
                     <Th>送信日</Th>
                     <Th className="text-right">送信数</Th>
                     <Th className="text-right">成功</Th>
-                    <Th className="text-right">失敗</Th>
+                    <Th className="text-right">配信済</Th>
+                    <Th className="text-right">到達率</Th>
                     <Th className="text-right">クリック</Th>
                     <Th className="text-right">クリック率</Th>
                   </tr>
@@ -166,8 +175,24 @@ export default function AnalyticsClient() {
                       <Td className="text-right font-mono text-sm text-success">
                         {campaign.success_count.toLocaleString()}
                       </Td>
-                      <Td className="text-right font-mono text-sm text-error">
-                        {campaign.failed_count.toLocaleString()}
+                      <Td className="text-right font-mono text-sm">
+                        <span className="text-success">{campaign.delivered_count.toLocaleString()}</span>
+                        {(campaign.pending_count > 0 || campaign.undelivered_count > 0) && (
+                          <span className="text-xs text-gray-400 ml-1">
+                            (待{campaign.pending_count}/不達{campaign.undelivered_count})
+                          </span>
+                        )}
+                      </Td>
+                      <Td className="text-right">
+                        <span className={`font-mono text-sm font-medium ${
+                          campaign.delivery_rate >= 90
+                            ? 'text-success'
+                            : campaign.delivery_rate >= 70
+                            ? 'text-warning'
+                            : 'text-gray-500'
+                        }`}>
+                          {campaign.delivery_rate}%
+                        </span>
                       </Td>
                       <Td className="text-right font-mono text-sm">
                         {campaign.click_count.toLocaleString()}
