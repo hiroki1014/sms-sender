@@ -27,6 +27,23 @@ function computeEffectiveLength(text: string): { raw: number; effective: number;
   return { raw: text.length, effective, urlCount: urls.length }
 }
 
+// ASCII のみなら GSM-7 ルール (160/153)、それ以外は UCS-2 ルール (70/67) で
+// SMSセグメント数を推定する
+function estimateSegments(text: string): { segments: number; encoding: 'GSM-7' | 'UCS-2'; limit: number } {
+  if (text.length === 0) return { segments: 0, encoding: 'GSM-7', limit: 160 }
+  // 非ASCII文字があるか（日本語含む）
+  // eslint-disable-next-line no-control-regex
+  const hasNonAscii = /[^\x00-\x7F]/.test(text)
+  if (!hasNonAscii) {
+    const len = text.length
+    if (len <= 160) return { segments: 1, encoding: 'GSM-7', limit: 160 }
+    return { segments: Math.ceil(len / 153), encoding: 'GSM-7', limit: 160 }
+  }
+  const len = text.length
+  if (len <= 70) return { segments: 1, encoding: 'UCS-2', limit: 70 }
+  return { segments: Math.ceil(len / 67), encoding: 'UCS-2', limit: 70 }
+}
+
 export default function TemplateEditor({
   value,
   onChange,
@@ -37,7 +54,8 @@ export default function TemplateEditor({
   }
 
   const { raw, effective, urlCount } = computeEffectiveLength(value)
-  const isLong = effective > 70
+  const { segments, encoding, limit } = estimateSegments(value.replace(URL_REGEX, 'x'.repeat(getShortUrlLength())))
+  const isMulti = segments > 1
 
   return (
     <div className="space-y-3">
@@ -46,7 +64,7 @@ export default function TemplateEditor({
           <TextAa className="w-4 h-4 text-gray-400" />
           メッセージテンプレート
         </label>
-        <span className={`text-xs ${isLong ? 'text-warning-dark' : 'text-gray-400'}`}>
+        <span className={`text-xs ${isMulti ? 'text-warning-dark' : 'text-gray-400'}`}>
           {urlCount > 0 ? (
             <>
               {effective}文字
@@ -57,7 +75,11 @@ export default function TemplateEditor({
           ) : (
             <>{raw}文字</>
           )}
-          {isLong && ' (分割送信)'}
+          {segments > 0 && (
+            <span className={`ml-2 ${isMulti ? 'font-medium' : ''}`}>
+              {segments}通分 ({encoding}/{limit}文字)
+            </span>
+          )}
         </span>
       </div>
 
@@ -89,8 +111,14 @@ export default function TemplateEditor({
       )}
 
       <p className="text-xs text-gray-500">
-        SMSは全角70文字、半角160文字を超えると分割送信されます。
+        SMSは全角70文字・半角160文字を超えると自動分割され、分割数ぶん料金がかかります
+        (日本語なら67文字/通, 半角なら153文字/通)。
       </p>
+      {isMulti && (
+        <p className="text-xs text-warning-dark">
+          ⚠ このメッセージは <strong>{segments}通分</strong> として送信されます。料金は約 {segments} 倍になります。
+        </p>
+      )}
     </div>
   )
 }
