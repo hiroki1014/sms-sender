@@ -225,10 +225,10 @@ async function getCampaignDetailStats(
     smsLogs?.filter(l => l.delivery_status && UNDELIVERED_STATUSES.has(l.delivery_status)).length || 0
   const pendingCount = Math.max(0, successCount - deliveredCount - undeliveredCount)
 
-  // 短縮URL情報
+  // 短縮URL情報 (sms_log_id を含めて取得 — CSV送信の場合は contact_id が無いため sms_log_id 経由で紐付け)
   const { data: shortUrls } = await supabase
     .from('short_urls')
-    .select('id, contact_id')
+    .select('id, contact_id, sms_log_id')
     .eq('campaign_id', campaignId)
 
   const shortUrlIds = shortUrls?.map(s => s.id) || []
@@ -267,18 +267,19 @@ async function getCampaignDetailStats(
     }
   })
 
-  // contact_id -> 集計クリック情報
-  const clicksPerContact = new Map<string, { count: number; first: string; last: string }>()
+  // sms_log_id 経由の集計（CSV送信でも contact_id 無しでも紐付けられる）
+  const clicksPerSmsLog = new Map<string, { count: number; first: string; last: string }>()
   shortUrls?.forEach(shortUrl => {
     const clickData = clicksByShortUrl.get(shortUrl.id)
-    if (!clickData || !shortUrl.contact_id) return
-    const existing = clicksPerContact.get(shortUrl.contact_id)
+    if (!clickData || !shortUrl.sms_log_id) return
+    const key = shortUrl.sms_log_id
+    const existing = clicksPerSmsLog.get(key)
     if (existing) {
       existing.count += clickData.count
       if (clickData.first < existing.first) existing.first = clickData.first
       if (clickData.last > existing.last) existing.last = clickData.last
     } else {
-      clicksPerContact.set(shortUrl.contact_id, {
+      clicksPerSmsLog.set(key, {
         count: clickData.count,
         first: clickData.first,
         last: clickData.last,
@@ -286,10 +287,10 @@ async function getCampaignDetailStats(
     }
   })
 
-  // 全受信者の行を構築（sms_logs 1件 = 1行、contact_idがあれば顧客情報と結合）
+  // 全受信者の行を構築（sms_log.id を主キーとしてクリックを紐付け）
   const recipients: RecipientDetail[] = (smsLogs || []).map(log => {
     const contact = log.contact_id ? contacts?.find(c => c.id === log.contact_id) : null
-    const clickData = log.contact_id ? clicksPerContact.get(log.contact_id) : null
+    const clickData = clicksPerSmsLog.get(log.id)
     return {
       contact_id: log.contact_id || null,
       phone_number: log.phone_number,
