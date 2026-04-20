@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { waitUntil } from '@vercel/functions'
 import { getShortUrlByCode, recordClick } from '@/lib/url-shortener'
 
 export async function GET(
@@ -25,21 +26,21 @@ export async function GET(
       )
     }
 
-    // クリックを記録
-    try {
-      const userAgent = request.headers.get('user-agent')
-      const forwardedFor = request.headers.get('x-forwarded-for')
-      const ipAddress = forwardedFor?.split(',')[0]?.trim() || null
+    // クリック記録はレスポンス返却後にバックグラウンド実行
+    // iMessage等のリンクプレビュー用クローラーのタイムアウト回避のため
+    const userAgent = request.headers.get('user-agent')
+    const forwardedFor = request.headers.get('x-forwarded-for')
+    const ipAddress = forwardedFor?.split(',')[0]?.trim() || null
 
-      await recordClick({
+    waitUntil(
+      recordClick({
         shortUrlId: shortUrl.id!,
         userAgent,
         ipAddress,
+      }).catch((clickError) => {
+        console.error('Failed to record click:', clickError)
       })
-    } catch (clickError) {
-      // クリック記録に失敗してもリダイレクトは実行
-      console.error('Failed to record click:', clickError)
-    }
+    )
 
     // 元のURLにリダイレクト（307 = Temporary Redirect）
     return NextResponse.redirect(shortUrl.original_url, { status: 307 })
