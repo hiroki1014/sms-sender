@@ -186,6 +186,15 @@ export default function CampaignFormClient() {
   // Can send check
   const canSend = campaignName.trim().length > 0 && maxCount > 0 && template.trim().length > 0
 
+  // 何が足りないかの説明（送信/予約ボタン非活性時のヒント）
+  const missingFields = useMemo(() => {
+    const missing: string[] = []
+    if (campaignName.trim().length === 0) missing.push('キャンペーン名')
+    if (template.trim().length === 0) missing.push('メッセージテンプレート')
+    if (maxCount === 0) missing.push('送信先')
+    return missing
+  }, [campaignName, template, maxCount])
+
   // Save draft
   const handleSaveDraft = async () => {
     if (!campaignName.trim()) {
@@ -557,6 +566,12 @@ export default function CampaignFormClient() {
           <Alert variant="success" title="送信完了">
             成功: {result.success}件 / 失敗: {result.failed}件 / 合計: {result.total}件
           </Alert>
+        )}
+
+        {missingFields.length > 0 && (
+          <p className="text-xs text-warning-dark">
+            送信ボタンを有効にするには {missingFields.join(' / ')} を入力してください
+          </p>
         )}
 
         {/* Actions */}
