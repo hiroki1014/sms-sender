@@ -158,7 +158,6 @@ export default function CampaignFormClient() {
     })
   }, [parsed.headers, phoneField, nameField])
 
-  // Fetch campaigns list (for exclusion filter)
   useEffect(() => {
     fetch('/api/campaigns')
       .then(r => r.json())
@@ -166,6 +165,15 @@ export default function CampaignFormClient() {
         if (d.campaigns) {
           setAllCampaigns(d.campaigns.filter((c: { status: string }) => c.status === 'sent' || c.status === 'sending').map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })))
         }
+      })
+      .catch(() => {})
+    fetch('/api/contacts/filters')
+      .then(r => r.json())
+      .then(d => {
+        if (d.tags) setAllTags(d.tags)
+        if (d.list_types) setAllListTypes(d.list_types)
+        if (d.call_results) setAllCallResults(d.call_results)
+        if (d.prefectures) setAllPrefectures(d.prefectures)
       })
       .catch(() => {})
   }, [])
@@ -184,21 +192,6 @@ export default function CampaignFormClient() {
 
       if (res.ok) {
         setContacts(data.contacts)
-
-        const tags = new Set<string>()
-        const listTypes = new Set<string>()
-        const callResults = new Set<string>()
-        const prefectures = new Set<string>()
-        data.contacts.forEach((c: Contact & { list_type?: string; call_result?: string; prefecture?: string }) => {
-          ;(c.tags || []).forEach(t => tags.add(t))
-          if (c.list_type) listTypes.add(c.list_type)
-          if (c.call_result) callResults.add(c.call_result)
-          if (c.prefecture) prefectures.add(c.prefecture)
-        })
-        setAllTags(Array.from(tags).sort())
-        setAllListTypes(Array.from(listTypes).sort())
-        setAllCallResults(Array.from(callResults).sort())
-        setAllPrefectures(Array.from(prefectures).sort())
       }
     } catch {
       setError('顧客の取得に失敗しました')

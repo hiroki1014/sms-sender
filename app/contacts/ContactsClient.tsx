@@ -68,21 +68,6 @@ export default function ContactsClient() {
       }
 
       setContacts(data.contacts)
-
-      const tags = new Set<string>()
-      const listTypes = new Set<string>()
-      const callResults = new Set<string>()
-      const prefectures = new Set<string>()
-      data.contacts.forEach((c: Contact) => {
-        ;(c.tags || []).forEach(t => tags.add(t))
-        if (c.list_type) listTypes.add(c.list_type)
-        if (c.call_result) callResults.add(c.call_result)
-        if (c.prefecture) prefectures.add(c.prefecture)
-      })
-      setAllTags(Array.from(tags).sort())
-      setAllListTypes(Array.from(listTypes).sort())
-      setAllCallResults(Array.from(callResults).sort())
-      setAllPrefectures(Array.from(prefectures).sort())
     } catch {
       setError('顧客の取得に失敗しました')
     } finally {
@@ -93,6 +78,18 @@ export default function ContactsClient() {
   useEffect(() => {
     fetchContacts()
   }, [selectedTag, includeOptedOut])
+
+  useEffect(() => {
+    fetch('/api/contacts/filters')
+      .then(r => r.json())
+      .then(d => {
+        if (d.tags) setAllTags(d.tags)
+        if (d.list_types) setAllListTypes(d.list_types)
+        if (d.call_results) setAllCallResults(d.call_results)
+        if (d.prefectures) setAllPrefectures(d.prefectures)
+      })
+      .catch(() => {})
+  }, [])
 
   const filteredContacts = useMemo(() => {
     return contacts.filter(c => {
