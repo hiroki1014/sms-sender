@@ -135,7 +135,7 @@ export default function ContactDetailClient() {
         <>
           {/* Contact info */}
           <Card>
-            <div className="px-4 py-3 space-y-2">
+            <div className="px-4 py-3 space-y-3">
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="font-mono text-sm text-gray-700">{contact?.phone_number}</span>
                 {contact?.opted_out && <Badge variant="error">配信停止</Badge>}
@@ -146,20 +146,31 @@ export default function ContactDetailClient() {
                   登録: {contact?.created_at ? formatDate(contact.created_at) : '-'}
                 </span>
               </div>
-              {(contact?.list_type || contact?.prefecture || contact?.gender || contact?.url) && (
-                <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
-                  {contact?.list_type && <span>{contact.list_type}</span>}
-                  {contact?.prefecture && <span>{contact.prefecture}</span>}
-                  {contact?.gender && <span>{contact.gender}</span>}
-                  {contact?.url && (
-                    <a href={contact.url} target="_blank" rel="noopener noreferrer" className="text-accent-600 hover:underline truncate max-w-xs">
-                      {contact.url}
-                    </a>
-                  )}
-                </div>
-              )}
+              <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
+                {[
+                  { label: '種別', value: contact?.list_type },
+                  { label: '架電結果', value: contact?.call_result },
+                  { label: '都道府県', value: contact?.prefecture },
+                  { label: '性別', value: contact?.gender },
+                  { label: 'URL', value: contact?.url, isUrl: true },
+                ].filter(f => f.value).map(f => (
+                  <div key={f.label} className="flex gap-2">
+                    <span className="text-gray-400 shrink-0 w-16">{f.label}</span>
+                    {f.isUrl ? (
+                      <a href={f.value!} target="_blank" rel="noopener noreferrer" className="text-accent-600 hover:underline truncate">
+                        {f.value}
+                      </a>
+                    ) : (
+                      <span className="text-gray-700 truncate">{f.value}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
               {contact?.notes && (
-                <p className="text-xs text-gray-500">{contact.notes}</p>
+                <div className="text-sm">
+                  <span className="text-gray-400">メモ</span>
+                  <p className="text-gray-700 mt-0.5 whitespace-pre-wrap">{contact.notes}</p>
+                </div>
               )}
             </div>
           </Card>

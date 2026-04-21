@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import AppLayout from '@/components/AppLayout'
 import { Button, Badge, Alert, Card } from '@/components/ui'
@@ -40,8 +40,14 @@ export default function ContactsClient() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedTag, setSelectedTag] = useState('')
+  const [selectedListType, setSelectedListType] = useState('')
+  const [selectedCallResult, setSelectedCallResult] = useState('')
+  const [selectedPrefecture, setSelectedPrefecture] = useState('')
   const [includeOptedOut, setIncludeOptedOut] = useState(false)
   const [allTags, setAllTags] = useState<string[]>([])
+  const [allListTypes, setAllListTypes] = useState<string[]>([])
+  const [allCallResults, setAllCallResults] = useState<string[]>([])
+  const [allPrefectures, setAllPrefectures] = useState<string[]>([])
   const [editingContactId, setEditingContactId] = useState<string | null>(null)
   const [editingTags, setEditingTags] = useState<string[]>([])
   const [newTag, setNewTag] = useState('')
@@ -64,8 +70,19 @@ export default function ContactsClient() {
       setContacts(data.contacts)
 
       const tags = new Set<string>()
-      data.contacts.forEach((c: Contact) => c.tags.forEach(t => tags.add(t)))
+      const listTypes = new Set<string>()
+      const callResults = new Set<string>()
+      const prefectures = new Set<string>()
+      data.contacts.forEach((c: Contact) => {
+        c.tags.forEach(t => tags.add(t))
+        if (c.list_type) listTypes.add(c.list_type)
+        if (c.call_result) callResults.add(c.call_result)
+        if (c.prefecture) prefectures.add(c.prefecture)
+      })
       setAllTags(Array.from(tags).sort())
+      setAllListTypes(Array.from(listTypes).sort())
+      setAllCallResults(Array.from(callResults).sort())
+      setAllPrefectures(Array.from(prefectures).sort())
     } catch {
       setError('顧客の取得に失敗しました')
     } finally {
@@ -76,6 +93,15 @@ export default function ContactsClient() {
   useEffect(() => {
     fetchContacts()
   }, [selectedTag, includeOptedOut])
+
+  const filteredContacts = useMemo(() => {
+    return contacts.filter(c => {
+      if (selectedListType && c.list_type !== selectedListType) return false
+      if (selectedCallResult && c.call_result !== selectedCallResult) return false
+      if (selectedPrefecture && c.prefecture !== selectedPrefecture) return false
+      return true
+    })
+  }, [contacts, selectedListType, selectedCallResult, selectedPrefecture])
 
   const handleOptOut = async (id: string, optOut: boolean) => {
     try {
@@ -158,7 +184,7 @@ export default function ContactsClient() {
   return (
     <AppLayout
       title="顧客管理"
-      subtitle={`${contacts.length}件の顧客`}
+      subtitle={filteredContacts.length === contacts.length ? `${contacts.length}件の顧客` : `${filteredContacts.length}/${contacts.length}件の顧客`}
       actions={
         <Link href="/contacts/import">
           <Button variant="primary" icon={<Plus className="w-4 h-4" />}>
@@ -185,6 +211,45 @@ export default function ContactsClient() {
               <option key={tag} value={tag}>{tag}</option>
             ))}
           </select>
+
+          {allListTypes.length > 0 && (
+            <select
+              value={selectedListType}
+              onChange={(e) => setSelectedListType(e.target.value)}
+              className="px-2.5 py-1.5 text-sm border border-gray-300 rounded hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
+            >
+              <option value="">すべての種別</option>
+              {allListTypes.map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          )}
+
+          {allCallResults.length > 0 && (
+            <select
+              value={selectedCallResult}
+              onChange={(e) => setSelectedCallResult(e.target.value)}
+              className="px-2.5 py-1.5 text-sm border border-gray-300 rounded hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
+            >
+              <option value="">すべての架電結果</option>
+              {allCallResults.map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          )}
+
+          {allPrefectures.length > 0 && (
+            <select
+              value={selectedPrefecture}
+              onChange={(e) => setSelectedPrefecture(e.target.value)}
+              className="px-2.5 py-1.5 text-sm border border-gray-300 rounded hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
+            >
+              <option value="">すべての都道府県</option>
+              {allPrefectures.map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          )}
 
           <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
             <input
@@ -234,7 +299,7 @@ export default function ContactsClient() {
               </tr>
             </TableHead>
             <TableBody>
-              {contacts.map((contact) => (
+              {filteredContacts.map((contact) => (
                 <Tr key={contact.id} className={contact.opted_out ? 'bg-gray-50/50' : ''}>
                   <Td mono>
                     <Link href={`/contacts/${contact.id}`} className="hover:text-accent-600 transition-colors">
@@ -286,7 +351,13 @@ export default function ContactsClient() {
                     ) : (
                       <div className="flex flex-wrap gap-1">
                         {contact.tags.map(tag => (
-                          <Badge key={tag} variant="accent">{tag}</Badge>
+                          <button
+                            key={tag}
+                            onClick={() => setSelectedTag(tag)}
+                            className="cursor-pointer"
+                          >
+                            <Badge variant="accent">{tag}</Badge>
+                          </button>
                         ))}
                       </div>
                     )}
