@@ -225,6 +225,7 @@ export default function ContactsClient() {
                 <Th>電話番号</Th>
                 <Th>名前</Th>
                 <Th>種別</Th>
+                <Th>架電結果</Th>
                 <Th>都道府県</Th>
                 <Th>タグ</Th>
                 <Th>配信</Th>
@@ -246,6 +247,7 @@ export default function ContactsClient() {
                     </Link>
                   </Td>
                   <Td className="text-sm text-gray-600">{contact.list_type || '-'}</Td>
+                  <Td className="text-sm text-gray-600">{contact.call_result || '-'}</Td>
                   <Td className="text-sm text-gray-600">{contact.prefecture || '-'}</Td>
                   <Td>
                     {editingContactId === contact.id ? (
