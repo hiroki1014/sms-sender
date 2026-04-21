@@ -11,17 +11,6 @@ import { Button, Alert, Card, CardBody, Badge } from '@/components/ui'
 import { parseCsv } from '@/lib/csv'
 import { replaceVariables } from '@/lib/template'
 import { estimateSegmentsFromTemplate, estimateCost } from '@/lib/sms-segments'
-
-function useCostPerSegment() {
-  const [cost, setCost] = useState<{ perSegment: number; source: string } | null>(null)
-  useEffect(() => {
-    fetch('/api/sms-cost')
-      .then((r) => r.json())
-      .then((d) => setCost(d))
-      .catch(() => setCost({ perSegment: 13, source: 'fallback' }))
-  }, [])
-  return cost
-}
 import {
   PaperPlaneTilt,
   Flask,
@@ -34,6 +23,17 @@ import {
   Clock,
   Lightning
 } from '@phosphor-icons/react'
+
+function useCostPerSegment() {
+  const [cost, setCost] = useState<{ perSegment: number; source: string } | null>(null)
+  useEffect(() => {
+    fetch('/api/sms-cost')
+      .then((r) => r.json())
+      .then((d) => setCost(d))
+      .catch(() => setCost({ perSegment: 13, source: 'fallback' }))
+  }, [])
+  return cost
+}
 
 interface Contact {
   id: string
@@ -524,6 +524,7 @@ export default function CampaignFormClient() {
                 <CsvInput value={csvText} onChange={setCsvText} />
 
                 {parsed.headers.length > 0 && (
+                  <>
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
                       <Phone className="w-4 h-4 text-gray-400" />
@@ -566,6 +567,7 @@ export default function CampaignFormClient() {
                       <CaretDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                     </div>
                   </div>
+                  </>
                 )}
               </>
             )}
