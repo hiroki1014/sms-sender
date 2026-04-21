@@ -11,7 +11,8 @@ import {
   Trash,
   Megaphone,
   XCircle,
-  Play
+  Play,
+  Copy
 } from '@phosphor-icons/react'
 
 interface Campaign {
@@ -238,6 +239,14 @@ export default function CampaignsClient() {
                           )}
                         </>
                       )}
+                      <Link href={`/campaigns/new?template=${encodeURIComponent(campaign.message_template)}&name=${encodeURIComponent(campaign.name + '（コピー）')}`}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon={<Copy className="w-4 h-4 text-gray-500" />}
+                          title="この文面で新規作成"
+                        />
+                      </Link>
                       <Button
                         variant="ghost"
                         size="sm"

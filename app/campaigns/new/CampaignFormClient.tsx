@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import AppLayout from '@/components/AppLayout'
 import CsvInput from '@/components/CsvInput'
 import TemplateEditor from '@/components/TemplateEditor'
@@ -69,9 +69,10 @@ function jstLocalToIso(value: string): string {
 
 export default function CampaignFormClient() {
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   // Campaign info
-  const [campaignName, setCampaignName] = useState('')
+  const [campaignName, setCampaignName] = useState(searchParams.get('name') || '')
 
   // Source selection
   const [sourceType, setSourceType] = useState<SourceType>('contacts')
@@ -92,7 +93,7 @@ export default function CampaignFormClient() {
   const [contactsLoading, setContactsLoading] = useState(false)
 
   // Shared state
-  const [template, setTemplate] = useState('')
+  const [template, setTemplate] = useState(searchParams.get('template') || '')
   const [count, setCount] = useState(1)
   const [isSending, setIsSending] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
