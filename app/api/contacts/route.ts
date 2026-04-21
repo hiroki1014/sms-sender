@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { isAuthenticated } from '@/lib/auth'
 import { getSupabase } from '@/lib/supabase'
 
+export const maxDuration = 60
+
 export interface Contact {
   id: string
   phone_number: string
@@ -163,7 +165,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const BATCH_SIZE = 20
+    const BATCH_SIZE = 50
     for (let i = 0; i < updateOps.length; i += BATCH_SIZE) {
       const batch = updateOps.slice(i, i + BATCH_SIZE)
       await Promise.all(
