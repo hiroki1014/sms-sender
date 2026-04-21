@@ -20,7 +20,7 @@ export default function ImportClient() {
   const [notesField, setNotesField] = useState('')
   const [tags, setTags] = useState('')
   const [importing, setImporting] = useState(false)
-  const [result, setResult] = useState<{ added: number; duplicates: number } | null>(null)
+  const [result, setResult] = useState<{ added: number; updated?: number; duplicates: number } | null>(null)
   const [error, setError] = useState('')
 
   const parsed = useMemo(() => parseCsv(csvText), [csvText])
@@ -252,7 +252,7 @@ export default function ImportClient() {
         {result && (
           <Alert variant="success" title="インポート完了">
             <div className="space-y-2">
-              <p>追加: {result.added}件 / 重複スキップ: {result.duplicates}件</p>
+              <p>追加: {result.added}件{result.updated ? ` / 更新: ${result.updated}件` : ''} / スキップ: {result.duplicates}件</p>
               <Link href="/contacts" className="text-success-dark hover:underline inline-flex items-center gap-1">
                 顧客一覧を見る <ArrowRight className="w-4 h-4" />
               </Link>

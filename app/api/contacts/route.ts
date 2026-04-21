@@ -117,7 +117,6 @@ export async function POST(request: NextRequest) {
 
     const existingPhones = new Set(existing?.map(e => e.phone_number) || [])
 
-    // 新規のみ追加
     const newContacts = contacts
       .filter(c => c.phone_number && !existingPhones.has(c.phone_number))
       .map(c => ({
@@ -132,20 +131,36 @@ export async function POST(request: NextRequest) {
         notes: c.notes || null,
       }))
 
-    const duplicateCount = contacts.length - newContacts.length
+    const updateContacts = contacts.filter(c => c.phone_number && existingPhones.has(c.phone_number))
 
     if (newContacts.length > 0) {
       const { error } = await supabase.from('contacts').insert(newContacts)
-
       if (error) {
         console.error('Insert contacts error:', error)
         return NextResponse.json({ error: '顧客の追加に失敗しました' }, { status: 500 })
       }
     }
 
+    let updatedCount = 0
+    const fields = ['name', 'tags', 'url', 'gender', 'list_type', 'status', 'prefecture', 'notes'] as const
+    for (const c of updateContacts) {
+      const updates: Record<string, unknown> = {}
+      for (const f of fields) {
+        const val = c[f]
+        if (val !== undefined && val !== null && val !== '') {
+          updates[f] = val
+        }
+      }
+      if (Object.keys(updates).length > 0) {
+        await supabase.from('contacts').update(updates).eq('phone_number', c.phone_number)
+        updatedCount++
+      }
+    }
+
     return NextResponse.json({
       added: newContacts.length,
-      duplicates: duplicateCount,
+      updated: updatedCount,
+      duplicates: updateContacts.length - updatedCount,
       total: contacts.length,
     })
   } catch (error) {
