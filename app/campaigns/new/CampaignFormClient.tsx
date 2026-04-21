@@ -10,6 +10,18 @@ import Preview from '@/components/Preview'
 import { Button, Alert, Card, CardBody, Badge } from '@/components/ui'
 import { parseCsv } from '@/lib/csv'
 import { replaceVariables } from '@/lib/template'
+import { estimateSegmentsFromTemplate, estimateCost } from '@/lib/sms-segments'
+
+function useCostPerSegment() {
+  const [cost, setCost] = useState<{ perSegment: number; source: string } | null>(null)
+  useEffect(() => {
+    fetch('/api/sms-cost')
+      .then((r) => r.json())
+      .then((d) => setCost(d))
+      .catch(() => setCost({ perSegment: 13, source: 'fallback' }))
+  }, [])
+  return cost
+}
 import {
   PaperPlaneTilt,
   Flask,
@@ -81,6 +93,9 @@ export default function CampaignFormClient() {
   const [isSaving, setIsSaving] = useState(false)
   const [result, setResult] = useState<SendResult | null>(null)
   const [error, setError] = useState('')
+
+  // SMS単価（API から実績ベースで取得）
+  const costData = useCostPerSegment()
 
   // Send mode (Phase 3: 予約送信)
   const [sendMode, setSendMode] = useState<SendMode>('immediate')
@@ -573,6 +588,20 @@ export default function CampaignFormClient() {
             送信ボタンを有効にするには {missingFields.join(' / ')} を入力してください
           </p>
         )}
+
+        {/* Cost Estimate */}
+        {canSend && costData && (() => {
+          const { segments } = estimateSegmentsFromTemplate(template)
+          const cost = estimateCost(segments, count, costData.perSegment)
+          return cost > 0 ? (
+            <p className="text-xs text-gray-600">
+              推定料金: <span className="font-medium text-gray-900">¥{cost.toLocaleString()}</span>
+              <span className="text-gray-400 ml-1">
+                (¥{costData.perSegment}/通 × {segments}通分 × {count}件{costData.source === 'fallback' ? ' ※概算' : ''})
+              </span>
+            </p>
+          ) : null
+        })()}
 
         {/* Actions */}
         <div className="flex gap-3">

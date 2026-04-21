@@ -1,47 +1,15 @@
 'use client'
 
 import { TextAa, Plus } from '@phosphor-icons/react'
+import {
+  computeEffectiveLength,
+  estimateSegmentsFromTemplate,
+} from '@/lib/sms-segments'
 
 interface TemplateEditorProps {
   value: string
   onChange: (value: string) => void
   availableVariables: string[]
-}
-
-const URL_REGEX = /https?:\/\/[^\s]+/g
-
-// 短縮後URL長を推定（ベースURL + "/r/" + 6文字のコード）
-function getShortUrlLength(): number {
-  const base = (process.env.NEXT_PUBLIC_SHORT_URL_BASE || '').replace(/\/$/, '')
-  if (!base) return 11 // "/r/XXXXXX" 相対パス fallback
-  return base.length + 3 + 6
-}
-
-function computeEffectiveLength(text: string): { raw: number; effective: number; urlCount: number } {
-  const urls = text.match(URL_REGEX) || []
-  const shortLen = getShortUrlLength()
-  let effective = text.length
-  for (const url of urls) {
-    effective = effective - url.length + shortLen
-  }
-  return { raw: text.length, effective, urlCount: urls.length }
-}
-
-// ASCII のみなら GSM-7 ルール (160/153)、それ以外は UCS-2 ルール (70/67) で
-// SMSセグメント数を推定する
-function estimateSegments(text: string): { segments: number; encoding: 'GSM-7' | 'UCS-2'; limit: number } {
-  if (text.length === 0) return { segments: 0, encoding: 'GSM-7', limit: 160 }
-  // 非ASCII文字があるか（日本語含む）
-  // eslint-disable-next-line no-control-regex
-  const hasNonAscii = /[^\x00-\x7F]/.test(text)
-  if (!hasNonAscii) {
-    const len = text.length
-    if (len <= 160) return { segments: 1, encoding: 'GSM-7', limit: 160 }
-    return { segments: Math.ceil(len / 153), encoding: 'GSM-7', limit: 160 }
-  }
-  const len = text.length
-  if (len <= 70) return { segments: 1, encoding: 'UCS-2', limit: 70 }
-  return { segments: Math.ceil(len / 67), encoding: 'UCS-2', limit: 70 }
 }
 
 export default function TemplateEditor({
@@ -53,8 +21,8 @@ export default function TemplateEditor({
     onChange(value + `{{${variable}}}`)
   }
 
-  const { raw, effective, urlCount } = computeEffectiveLength(value)
-  const { segments, encoding, limit } = estimateSegments(value.replace(URL_REGEX, 'x'.repeat(getShortUrlLength())))
+  const { raw, urlCount } = computeEffectiveLength(value)
+  const { segments, encoding, limit, effective } = estimateSegmentsFromTemplate(value)
   const isMulti = segments > 1
 
   return (

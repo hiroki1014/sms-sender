@@ -64,6 +64,12 @@ export async function POST(request: NextRequest) {
         if (msg.errorCode) {
           updates.error_message = `Twilio error ${msg.errorCode}${msg.errorMessage ? `: ${msg.errorMessage}` : ''}`
         }
+        if (msg.price) {
+          updates.price = Math.abs(parseFloat(msg.price))
+        }
+        if (msg.numSegments) {
+          updates.num_segments = parseInt(msg.numSegments, 10)
+        }
 
         const { error: upErr } = await supabase
           .from('sms_logs')
