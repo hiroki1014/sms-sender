@@ -153,7 +153,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
                           <span className="text-xs text-gray-400">—</span>
                         )}
                         {r.error_message && (
-                          <div className="text-xs text-error mt-0.5 truncate max-w-xs" title={r.error_message}>
+                          <div className="text-xs text-error mt-0.5">
                             {r.error_message}
                           </div>
                         )}
