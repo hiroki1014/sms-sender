@@ -190,7 +190,7 @@ export default function CampaignFormClient() {
         const callResults = new Set<string>()
         const prefectures = new Set<string>()
         data.contacts.forEach((c: Contact & { list_type?: string; call_result?: string; prefecture?: string }) => {
-          c.tags.forEach(t => tags.add(t))
+          ;(c.tags || []).forEach(t => tags.add(t))
           if (c.list_type) listTypes.add(c.list_type)
           if (c.call_result) callResults.add(c.call_result)
           if (c.prefecture) prefectures.add(c.prefecture)

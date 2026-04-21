@@ -74,7 +74,7 @@ export default function ContactsClient() {
       const callResults = new Set<string>()
       const prefectures = new Set<string>()
       data.contacts.forEach((c: Contact) => {
-        c.tags.forEach(t => tags.add(t))
+        ;(c.tags || []).forEach(t => tags.add(t))
         if (c.list_type) listTypes.add(c.list_type)
         if (c.call_result) callResults.add(c.call_result)
         if (c.prefecture) prefectures.add(c.prefecture)
@@ -138,7 +138,7 @@ export default function ContactsClient() {
 
   const handleEditTags = (contact: Contact) => {
     setEditingContactId(contact.id)
-    setEditingTags([...contact.tags])
+    setEditingTags([...(contact.tags || [])])
     setNewTag('')
   }
 
@@ -350,7 +350,7 @@ export default function ContactsClient() {
                       </div>
                     ) : (
                       <div className="flex flex-wrap gap-1">
-                        {contact.tags.map(tag => (
+                        {(contact.tags || []).map(tag => (
                           <button
                             key={tag}
                             onClick={() => setSelectedTag(tag)}
