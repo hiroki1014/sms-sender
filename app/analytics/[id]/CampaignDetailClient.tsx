@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import AppLayout from '@/components/AppLayout'
 import { Alert, Badge, Card } from '@/components/ui'
 import { Table, TableHead, TableBody, Th, Td, Tr } from '@/components/ui'
-import { ArrowLeft, CursorClick, Envelope, PaperPlaneTilt, X, Clock } from '@phosphor-icons/react'
+import { ArrowLeft, CursorClick, Envelope, PaperPlaneTilt, X, Clock, Funnel, MagnifyingGlass } from '@phosphor-icons/react'
 
 interface Recipient {
   contact_id: string | null
@@ -62,10 +62,35 @@ function fmt(iso: string | null): string {
   })
 }
 
+type DeliveryFilter = 'all' | 'delivered' | 'undelivered' | 'pending'
+type ClickFilter = 'all' | 'clicked' | 'not_clicked'
+
 export default function CampaignDetailClient({ campaignId }: { campaignId: string }) {
   const [data, setData] = useState<DetailData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>('all')
+  const [clickFilter, setClickFilter] = useState<ClickFilter>('all')
+  const [searchQuery, setSearchQuery] = useState('')
+
+  const filteredRecipients = useMemo(() => {
+    if (!data) return []
+    return data.recipients.filter(r => {
+      if (deliveryFilter === 'delivered' && !DELIVERED.has(r.delivery_status || '')) return false
+      if (deliveryFilter === 'undelivered' && !UNDELIVERED.has(r.delivery_status || '')) return false
+      if (deliveryFilter === 'pending' && (DELIVERED.has(r.delivery_status || '') || UNDELIVERED.has(r.delivery_status || ''))) return false
+      if (clickFilter === 'clicked' && r.click_count === 0) return false
+      if (clickFilter === 'not_clicked' && r.click_count > 0) return false
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase()
+        const matchPhone = r.phone_number.includes(q)
+        const matchName = r.contact_name?.toLowerCase().includes(q)
+        const matchError = r.error_message?.toLowerCase().includes(q)
+        if (!matchPhone && !matchName && !matchError) return false
+      }
+      return true
+    })
+  }, [data, deliveryFilter, clickFilter, searchQuery])
 
   useEffect(() => {
     ;(async () => {
@@ -118,11 +143,50 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
 
           {/* Per-recipient */}
           <Card>
-            <div className="px-4 py-3 border-b border-gray-150">
-              <h2 className="font-medium text-gray-900">受信者別</h2>
+            <div className="px-4 py-3 border-b border-gray-150 space-y-3">
+              <h2 className="font-medium text-gray-900">
+                受信者別
+                <span className="text-xs text-gray-400 font-normal ml-2">
+                  {filteredRecipients.length}/{data.recipients.length}件
+                </span>
+              </h2>
+              <div className="flex flex-wrap items-center gap-3">
+                <Funnel className="w-4 h-4 text-gray-400" />
+                <select
+                  value={deliveryFilter}
+                  onChange={(e) => setDeliveryFilter(e.target.value as DeliveryFilter)}
+                  className="px-2.5 py-1.5 text-sm border border-gray-300 rounded hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
+                >
+                  <option value="all">すべての到達状態</option>
+                  <option value="delivered">配信済み</option>
+                  <option value="undelivered">不達</option>
+                  <option value="pending">未確定</option>
+                </select>
+                <select
+                  value={clickFilter}
+                  onChange={(e) => setClickFilter(e.target.value as ClickFilter)}
+                  className="px-2.5 py-1.5 text-sm border border-gray-300 rounded hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
+                >
+                  <option value="all">すべてのクリック</option>
+                  <option value="clicked">クリックあり</option>
+                  <option value="not_clicked">クリックなし</option>
+                </select>
+                <div className="relative flex-1 min-w-[180px]">
+                  <MagnifyingGlass className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="電話番号・名前・エラーで検索"
+                    className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
+                  />
+                </div>
+              </div>
             </div>
-            {data.recipients.length === 0 ? (
-              <div className="py-12 text-center text-sm text-gray-500">送信ログがありません</div>
+            {filteredRecipients.length === 0 ? (
+              <div className="py-12 text-center text-sm text-gray-500">
+                {data.recipients.length === 0 ? '送信ログがありません' : '条件に一致するデータがありません'}
+              </div>
             ) : (
               <Table>
                 <TableHead>
@@ -136,7 +200,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
                   </tr>
                 </TableHead>
                 <TableBody>
-                  {data.recipients.map((r, idx) => (
+                  {filteredRecipients.map((r, idx) => (
                     <Tr key={`${r.contact_id || 'anon'}-${idx}`}>
                       <Td>
                         <div className="font-mono text-sm text-gray-900">{r.phone_number}</div>
