@@ -245,6 +245,19 @@ export default function CampaignFormClient() {
     }
   }
 
+  // 送信先の電話番号バリデーション
+  const validateRecipients = (): string | null => {
+    const emptyPhones = recipients.filter(r => !r.phone || r.phone.trim().length === 0)
+    if (emptyPhones.length > 0) {
+      return `電話番号が空の送信先が ${emptyPhones.length} 件あります。CSV の電話番号列が正しく選択されているか確認してください。`
+    }
+    const emptyMessages = recipients.filter(r => !r.message || r.message.trim().length === 0)
+    if (emptyMessages.length > 0) {
+      return `メッセージが空の送信先が ${emptyMessages.length} 件あります。`
+    }
+    return null
+  }
+
   // 予約送信（日時指定）
   const handleSchedule = async () => {
     if (!campaignName.trim()) {
@@ -258,6 +271,11 @@ export default function CampaignFormClient() {
     const scheduledIso = jstLocalToIso(scheduledLocal)
     if (new Date(scheduledIso).getTime() <= Date.now()) {
       setError('予約日時は未来の時刻を指定してください')
+      return
+    }
+    const recipientError = validateRecipients()
+    if (recipientError) {
+      setError(recipientError)
       return
     }
 
@@ -297,6 +315,13 @@ export default function CampaignFormClient() {
     if (!campaignName.trim()) {
       setError('キャンペーン名を入力してください')
       return
+    }
+    if (!dryRun) {
+      const recipientError = validateRecipients()
+      if (recipientError) {
+        setError(recipientError)
+        return
+      }
     }
 
     setError('')
