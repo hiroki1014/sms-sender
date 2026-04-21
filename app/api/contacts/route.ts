@@ -146,14 +146,19 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabase()
 
-    // 重複チェックのため既存の電話番号を取得
-    const phoneNumbers = contacts.map(c => c.phone_number).filter(Boolean)
-    const { data: existing } = await supabase
-      .from('contacts')
-      .select('phone_number')
-      .in('phone_number', phoneNumbers)
-
-    const existingPhones = new Set(existing?.map(e => e.phone_number) || [])
+    // 重複チェックのため既存の電話番号を取得（バッチで全件取得）
+    const phoneNumbers = contacts.map(c => c.phone_number).filter(Boolean) as string[]
+    const existingPhones = new Set<string>()
+    const QUERY_BATCH = 500
+    for (let i = 0; i < phoneNumbers.length; i += QUERY_BATCH) {
+      const batch = phoneNumbers.slice(i, i + QUERY_BATCH)
+      const { data: existing } = await supabase
+        .from('contacts')
+        .select('phone_number')
+        .in('phone_number', batch)
+        .limit(QUERY_BATCH)
+      existing?.forEach(e => existingPhones.add(e.phone_number))
+    }
 
     const newContacts = contacts
       .filter(c => c.phone_number && !existingPhones.has(c.phone_number))
@@ -173,11 +178,16 @@ export async function POST(request: NextRequest) {
 
     const existingContacts = new Map<string, { tags: string[] }>()
     if (updateContacts.length > 0) {
-      const { data: existingData } = await supabase
-        .from('contacts')
-        .select('phone_number, tags')
-        .in('phone_number', updateContacts.map(c => c.phone_number).filter(Boolean) as string[])
-      existingData?.forEach(e => existingContacts.set(e.phone_number, { tags: e.tags || [] }))
+      const updatePhones = updateContacts.map(c => c.phone_number).filter(Boolean) as string[]
+      for (let i = 0; i < updatePhones.length; i += QUERY_BATCH) {
+        const batch = updatePhones.slice(i, i + QUERY_BATCH)
+        const { data: existingData } = await supabase
+          .from('contacts')
+          .select('phone_number, tags')
+          .in('phone_number', batch)
+          .limit(QUERY_BATCH)
+        existingData?.forEach(e => existingContacts.set(e.phone_number, { tags: e.tags || [] }))
+      }
     }
 
     const fields = ['name', 'url', 'gender', 'list_type', 'call_result', 'prefecture', 'notes'] as const
