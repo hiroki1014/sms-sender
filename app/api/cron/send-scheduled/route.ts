@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
   const { data: due, error: fetchError } = await supabase
     .from('campaigns')
     .select('*')
-    .eq('status', 'scheduled')
+    .in('status', ['scheduled', 'sending'])
     .lte('scheduled_at', now)
     .order('scheduled_at', { ascending: true })
 
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
       .from('campaigns')
       .update({ status: 'sending' })
       .eq('id', campaign.id)
-      .eq('status', 'scheduled')
+      .in('status', ['scheduled', 'sending'])
 
     if (lockError) {
       console.error(`Lock failed for campaign ${campaign.id}:`, lockError)

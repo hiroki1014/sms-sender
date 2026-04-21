@@ -36,6 +36,17 @@ export async function sendCampaign({
   let failedCount = 0
   const results: SendResult[] = []
 
+  // 冪等性: 既に試行済みの電話番号をスキップ（重複送信防止）
+  const alreadySent = new Set<string>()
+  if (campaignId && !dryRun) {
+    const supabase = getSupabase()
+    const { data: logs } = await supabase
+      .from('sms_logs')
+      .select('phone_number')
+      .eq('campaign_id', campaignId)
+    logs?.forEach(l => alreadySent.add(l.phone_number))
+  }
+
   // opt-out チェック用: contact_id がある宛先は事前にまとめて確認
   const contactIds = recipients.map(r => r.contact_id).filter(Boolean) as string[]
   const optedOutIds = new Set<string>()
@@ -50,6 +61,10 @@ export async function sendCampaign({
   }
 
   for (const recipient of recipients) {
+    if (campaignId && alreadySent.has(recipient.phone)) {
+      continue
+    }
+
     if (!recipient.phone || !recipient.message) {
       failedCount++
       results.push({

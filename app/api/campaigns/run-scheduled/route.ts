@@ -26,18 +26,18 @@ export async function POST(request: NextRequest) {
       .from('campaigns')
       .select('*')
       .eq('id', id)
-      .eq('status', 'scheduled')
+      .in('status', ['scheduled', 'sending'])
       .single()
 
     if (fetchError || !campaign) {
-      return NextResponse.json({ error: '予約中のキャンペーンが見つかりません' }, { status: 404 })
+      return NextResponse.json({ error: '実行可能なキャンペーンが見つかりません' }, { status: 404 })
     }
 
     const { error: lockError } = await supabase
       .from('campaigns')
       .update({ status: 'sending' })
       .eq('id', id)
-      .eq('status', 'scheduled')
+      .in('status', ['scheduled', 'sending'])
 
     if (lockError) {
       return NextResponse.json({ error: 'ステータス更新に失敗しました' }, { status: 500 })
@@ -75,6 +75,14 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Run scheduled error:', error)
+    if (id) {
+      const supabase = getSupabase()
+      const message = error instanceof Error ? error.message : String(error)
+      await supabase
+        .from('campaigns')
+        .update({ status: 'scheduled', last_error: message })
+        .eq('id', id)
+    }
     return NextResponse.json({ error: '実行に失敗しました' }, { status: 500 })
   }
 }

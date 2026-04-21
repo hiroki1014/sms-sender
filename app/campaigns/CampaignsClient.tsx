@@ -218,22 +218,24 @@ export default function CampaignsClient() {
                   </Td>
                   <Td>
                     <div className="flex items-center gap-1">
-                      {campaign.status === 'scheduled' && (
+                      {(campaign.status === 'scheduled' || campaign.status === 'sending') && (
                         <>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleRunNow(campaign.id)}
                             icon={<Play className="w-4 h-4 text-accent-600" />}
-                            title="今すぐ実行"
+                            title={campaign.status === 'sending' ? '再実行' : '今すぐ実行'}
                           />
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleCancel(campaign.id)}
-                            icon={<XCircle className="w-4 h-4 text-warning" />}
-                            title="予約キャンセル"
-                          />
+                          {campaign.status === 'scheduled' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleCancel(campaign.id)}
+                              icon={<XCircle className="w-4 h-4 text-warning" />}
+                              title="予約キャンセル"
+                            />
+                          )}
                         </>
                       )}
                       <Button
