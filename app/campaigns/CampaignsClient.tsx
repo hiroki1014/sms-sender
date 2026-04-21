@@ -10,7 +10,8 @@ import {
   Funnel,
   Trash,
   Megaphone,
-  XCircle
+  XCircle,
+  Play
 } from '@phosphor-icons/react'
 
 interface Campaign {
@@ -95,6 +96,26 @@ export default function CampaignsClient() {
       }
     } catch {
       setError('キャンセルに失敗しました')
+    }
+  }
+
+  const handleRunNow = async (id: string) => {
+    if (!confirm('この予約キャンペーンを今すぐ実行しますか？')) return
+
+    try {
+      const res = await fetch('/api/campaigns/run-scheduled', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        fetchCampaigns()
+      } else {
+        setError(data.error || '実行に失敗しました')
+      }
+    } catch {
+      setError('実行に失敗しました')
     }
   }
 
@@ -198,13 +219,22 @@ export default function CampaignsClient() {
                   <Td>
                     <div className="flex items-center gap-1">
                       {campaign.status === 'scheduled' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleCancel(campaign.id)}
-                          icon={<XCircle className="w-4 h-4 text-warning" />}
-                          title="予約キャンセル"
-                        />
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRunNow(campaign.id)}
+                            icon={<Play className="w-4 h-4 text-accent-600" />}
+                            title="今すぐ実行"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleCancel(campaign.id)}
+                            icon={<XCircle className="w-4 h-4 text-warning" />}
+                            title="予約キャンセル"
+                          />
+                        </>
                       )}
                       <Button
                         variant="ghost"
