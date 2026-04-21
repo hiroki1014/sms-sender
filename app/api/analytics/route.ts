@@ -31,6 +31,18 @@ interface OverallStats {
   overall_click_rate: number
 }
 
+interface OverallCharts {
+  clickHeatmap: Array<{ day: number; hour: number; count: number }>
+  trend: Array<{ name: string; delivery_rate: number; click_rate: number }>
+  cpc: { total_cost: number; total_clicks: number; cpc: number }
+  repeaters: { multi_click_contacts: number; zero_click_contacts: number; total_contacts: number }
+}
+
+interface DetailCharts {
+  timeToClick: Array<{ bucket: string; count: number }>
+  tagBreakdown: Array<{ tag: string; sent: number; clicked: number; rate: number }>
+}
+
 const DELIVERED_STATUSES = new Set(['delivered', 'read', 'sent'])
 const UNDELIVERED_STATUSES = new Set(['undelivered', 'failed', 'canceled'])
 
@@ -64,6 +76,7 @@ export async function GET(request: NextRequest) {
 async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promise<{
   overall: OverallStats
   campaigns: CampaignStats[]
+  charts: OverallCharts
 }> {
   // キャンペーン一覧を取得
   const { data: campaigns } = await supabase
@@ -87,6 +100,12 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
         overall_click_rate: 0,
       },
       campaigns: [],
+      charts: {
+        clickHeatmap: [],
+        trend: [],
+        cpc: { total_cost: 0, total_clicks: 0, cpc: 0 },
+        repeaters: { multi_click_contacts: 0, zero_click_contacts: 0, total_contacts: 0 },
+      },
     }
   }
 
@@ -95,13 +114,13 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
   // SMS送信統計を取得
   const { data: smsLogs } = await supabase
     .from('sms_logs')
-    .select('campaign_id, status, delivery_status')
+    .select('campaign_id, status, delivery_status, price')
     .in('campaign_id', campaignIds)
 
   // クリック統計を取得（short_urlsとclick_logsをJOIN）
   const { data: shortUrls } = await supabase
     .from('short_urls')
-    .select('id, campaign_id')
+    .select('id, campaign_id, contact_id')
     .in('campaign_id', campaignIds)
 
   const shortUrlIds = shortUrls?.map(s => s.id) || []
@@ -109,8 +128,9 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
   const { data: clickLogs } = shortUrlIds.length > 0
     ? await supabase
         .from('click_logs')
-        .select('short_url_id')
+        .select('short_url_id, clicked_at')
         .in('short_url_id', shortUrlIds)
+        .limit(10000)
     : { data: [] }
 
   // キャンペーンごとの統計を計算
@@ -162,6 +182,70 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
   const totalClicks = campaignStats.reduce((sum, c) => sum + c.click_count, 0)
   const totalUniqueClicks = campaignStats.reduce((sum, c) => sum + c.unique_click_count, 0)
 
+  // --- Charts ---
+
+  // ヒートマップ: clicked_at を JST に変換し曜日×時間帯で集計
+  const heatmapMap = new Map<string, number>()
+  clickLogs?.forEach(click => {
+    const d = new Date(click.clicked_at)
+    // UTC→JST (+9h)
+    const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000)
+    const day = jst.getUTCDay() // 0=日〜6=土
+    const hour = jst.getUTCHours()
+    const key = `${day}-${hour}`
+    heatmapMap.set(key, (heatmapMap.get(key) || 0) + 1)
+  })
+  const clickHeatmap = Array.from(heatmapMap.entries()).map(([key, count]) => {
+    const [day, hour] = key.split('-').map(Number)
+    return { day, hour, count }
+  })
+
+  // 推移: campaignStats を sent_at 昇順ソート
+  const trend = [...campaignStats]
+    .filter(c => c.sent_at !== null)
+    .sort((a, b) => new Date(a.sent_at!).getTime() - new Date(b.sent_at!).getTime())
+    .map(c => ({
+      name: c.campaign_name,
+      delivery_rate: c.delivery_rate,
+      click_rate: c.click_rate,
+    }))
+
+  // CPC: sms_logs の price 合計 / クリック総数
+  const totalCost = smsLogs?.reduce((sum, l) => sum + (Number(l.price) || 0), 0) || 0
+  const cpc = {
+    total_cost: totalCost,
+    total_clicks: totalClicks,
+    cpc: totalClicks > 0 ? Math.round((totalCost / totalClicks) * 100) / 100 : 0,
+  }
+
+  // リピーター: contact_id ごとにクリックされたキャンペーンの Set を作る
+  const contactCampaignMap = new Map<string, Set<string>>()
+  shortUrls?.forEach(su => {
+    if (!su.contact_id) return
+    const suClicks = clickLogs?.filter(c => c.short_url_id === su.id) || []
+    if (suClicks.length === 0) return
+    if (!contactCampaignMap.has(su.contact_id)) {
+      contactCampaignMap.set(su.contact_id, new Set())
+    }
+    contactCampaignMap.get(su.contact_id)!.add(su.campaign_id)
+  })
+  const multiClickContacts = Array.from(contactCampaignMap.values()).filter(s => s.size > 1).length
+  const clickedContacts = contactCampaignMap.size
+
+  // contacts 全数 (opted_out=false)
+  const { count: totalContactsCount } = await supabase
+    .from('contacts')
+    .select('id', { count: 'exact', head: true })
+    .eq('opted_out', false)
+  const totalContacts = totalContactsCount || 0
+  const zeroClickContacts = totalContacts - clickedContacts
+
+  const repeaters = {
+    multi_click_contacts: multiClickContacts,
+    zero_click_contacts: Math.max(0, zeroClickContacts),
+    total_contacts: totalContacts,
+  }
+
   return {
     overall: {
       total_campaigns: campaigns.length,
@@ -176,6 +260,12 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
       overall_click_rate: totalSuccess > 0 ? Math.round((totalUniqueClicks / totalSuccess) * 100) : 0,
     },
     campaigns: campaignStats,
+    charts: {
+      clickHeatmap,
+      trend,
+      cpc,
+      repeaters,
+    },
   }
 }
 
@@ -198,6 +288,7 @@ async function getCampaignDetailStats(
 ): Promise<{
   campaign: CampaignStats
   recipients: RecipientDetail[]
+  charts: DetailCharts
 }> {
   // キャンペーン情報
   const { data: campaign, error: campaignError } = await supabase
@@ -242,14 +333,28 @@ async function getCampaignDetailStats(
         .order('clicked_at', { ascending: true })
     : { data: [] }
 
-  // 顧客情報を取得
+  // 顧客情報を取得（contact_id + phone_number の両方で引く）
   const contactIds = Array.from(new Set(shortUrls?.map(s => s.contact_id).filter(Boolean) || []))
-  const { data: contacts } = contactIds.length > 0
-    ? await supabase
+  const phoneNumbers = Array.from(new Set(smsLogs?.map(l => l.phone_number).filter(Boolean) || []))
+  let contacts: Array<{ id: string; name: string | null; phone_number: string; tags: string[] }> = []
+  if (contactIds.length > 0) {
+    const { data } = await supabase
+      .from('contacts')
+      .select('id, name, phone_number, tags')
+      .in('id', contactIds)
+    if (data) contacts = data
+  }
+  if (phoneNumbers.length > 0) {
+    const existingPhones = new Set(contacts.map(c => c.phone_number))
+    const missingPhones = phoneNumbers.filter(p => !existingPhones.has(p))
+    if (missingPhones.length > 0) {
+      const { data } = await supabase
         .from('contacts')
-        .select('id, name, phone_number')
-        .in('id', contactIds)
-    : { data: [] }
+        .select('id, name, phone_number, tags')
+        .in('phone_number', missingPhones)
+      if (data) contacts = [...contacts, ...data]
+    }
+  }
 
   // 顧客ごとのクリック統計
   const clicksByShortUrl = new Map<string, { count: number; first: string; last: string }>()
@@ -289,7 +394,9 @@ async function getCampaignDetailStats(
 
   // 全受信者の行を構築（sms_log.id を主キーとしてクリックを紐付け）
   const recipients: RecipientDetail[] = (smsLogs || []).map(log => {
-    const contact = log.contact_id ? contacts?.find(c => c.id === log.contact_id) : null
+    const contact = log.contact_id
+      ? contacts?.find(c => c.id === log.contact_id)
+      : contacts?.find(c => c.phone_number === log.phone_number) || null
     const clickData = clicksPerSmsLog.get(log.id)
     return {
       contact_id: log.contact_id || null,
@@ -308,6 +415,88 @@ async function getCampaignDetailStats(
   const clickCount = clickLogs?.length || 0
   const uniqueClickCount = clicksByShortUrl.size
 
+  // --- Charts ---
+
+  // timeToClick: SMS送信からクリックまでの時間をバケットに振り分け
+  const TIME_BUCKETS = [
+    { label: '0-5分', max: 5 },
+    { label: '5-15分', max: 15 },
+    { label: '15-30分', max: 30 },
+    { label: '30分-1時間', max: 60 },
+    { label: '1-3時間', max: 180 },
+    { label: '3-6時間', max: 360 },
+    { label: '6-12時間', max: 720 },
+    { label: '12-24時間', max: 1440 },
+    { label: '24時間+', max: Infinity },
+  ]
+  const bucketCounts = new Map<string, number>(TIME_BUCKETS.map(b => [b.label, 0]))
+
+  // sms_log_id → sent_at のマップ
+  const smsLogSentAt = new Map<string, string>()
+  smsLogs?.forEach(log => {
+    if (log.sent_at) smsLogSentAt.set(log.id, log.sent_at)
+  })
+
+  // short_url.sms_log_id 経由で click_logs と sms_logs を結合
+  shortUrls?.forEach(su => {
+    if (!su.sms_log_id) return
+    const sentAt = smsLogSentAt.get(su.sms_log_id)
+    if (!sentAt) return
+    const suClicks = clickLogs?.filter(c => c.short_url_id === su.id) || []
+    suClicks.forEach(click => {
+      const diffMinutes = (new Date(click.clicked_at).getTime() - new Date(sentAt).getTime()) / (1000 * 60)
+      const bucket = TIME_BUCKETS.find(b => diffMinutes < b.max) || TIME_BUCKETS[TIME_BUCKETS.length - 1]
+      bucketCounts.set(bucket.label, (bucketCounts.get(bucket.label) || 0) + 1)
+    })
+  })
+
+  const timeToClick = TIME_BUCKETS.map(b => ({
+    bucket: b.label,
+    count: bucketCounts.get(b.label) || 0,
+  }))
+
+  // tagBreakdown: タグごとに送信数とクリック数を集計
+  // sms_logs.contact_id → contacts.tags
+  const contactTagsMap = new Map<string, string[]>()
+  contacts?.forEach(c => {
+    if (c.tags && Array.isArray(c.tags) && c.tags.length > 0) {
+      contactTagsMap.set(c.id, c.tags as string[])
+    }
+  })
+
+  // クリックした contact_id の Set
+  const clickedContactIds = new Set<string>()
+  shortUrls?.forEach(su => {
+    if (!su.contact_id) return
+    const hasClick = clickLogs?.some(c => c.short_url_id === su.id) || false
+    if (hasClick) clickedContactIds.add(su.contact_id)
+  })
+
+  const tagSent = new Map<string, number>()
+  const tagClicked = new Map<string, number>()
+
+  smsLogs?.forEach(log => {
+    if (!log.contact_id) return
+    const tags = contactTagsMap.get(log.contact_id)
+    if (!tags) return
+    tags.forEach(tag => {
+      tagSent.set(tag, (tagSent.get(tag) || 0) + 1)
+      if (clickedContactIds.has(log.contact_id!)) {
+        tagClicked.set(tag, (tagClicked.get(tag) || 0) + 1)
+      }
+    })
+  })
+
+  const tagBreakdown = Array.from(tagSent.entries()).map(([tag, sent]) => {
+    const clicked = tagClicked.get(tag) || 0
+    return {
+      tag,
+      sent,
+      clicked,
+      rate: sent > 0 ? Math.round((clicked / sent) * 100) : 0,
+    }
+  })
+
   return {
     campaign: {
       campaign_id: campaign.id,
@@ -325,5 +514,9 @@ async function getCampaignDetailStats(
       click_rate: successCount > 0 ? Math.round((uniqueClickCount / successCount) * 100) : 0,
     },
     recipients,
+    charts: {
+      timeToClick,
+      tagBreakdown,
+    },
   }
 }
