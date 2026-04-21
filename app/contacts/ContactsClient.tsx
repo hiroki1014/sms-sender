@@ -228,8 +228,16 @@ export default function ContactsClient() {
             <TableBody>
               {contacts.map((contact) => (
                 <Tr key={contact.id} className={contact.opted_out ? 'bg-gray-50/50' : ''}>
-                  <Td mono>{contact.phone_number}</Td>
-                  <Td className="text-gray-900">{contact.name || '-'}</Td>
+                  <Td mono>
+                    <Link href={`/contacts/${contact.id}`} className="hover:text-accent-600 transition-colors">
+                      {contact.phone_number}
+                    </Link>
+                  </Td>
+                  <Td className="text-gray-900">
+                    <Link href={`/contacts/${contact.id}`} className="hover:text-accent-600 transition-colors">
+                      {contact.name || '-'}
+                    </Link>
+                  </Td>
                   <Td>
                     {editingContactId === contact.id ? (
                       <div className="flex flex-wrap items-center gap-1">

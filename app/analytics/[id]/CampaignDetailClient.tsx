@@ -223,9 +223,20 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
                   {filteredRecipients.map((r, idx) => (
                     <Tr key={`${r.contact_id || 'anon'}-${idx}`}>
                       <Td>
-                        <div className="font-mono text-sm text-gray-900">{r.phone_number}</div>
-                        {r.contact_name && (
-                          <div className="text-xs text-gray-500">{r.contact_name}</div>
+                        {r.contact_id ? (
+                          <Link href={`/contacts/${r.contact_id}`} className="hover:text-accent-600 transition-colors">
+                            <div className="font-mono text-sm text-gray-900">{r.phone_number}</div>
+                            {r.contact_name && (
+                              <div className="text-xs text-gray-500">{r.contact_name}</div>
+                            )}
+                          </Link>
+                        ) : (
+                          <>
+                            <div className="font-mono text-sm text-gray-900">{r.phone_number}</div>
+                            {r.contact_name && (
+                              <div className="text-xs text-gray-500">{r.contact_name}</div>
+                            )}
+                          </>
                         )}
                       </Td>
                       <Td>
