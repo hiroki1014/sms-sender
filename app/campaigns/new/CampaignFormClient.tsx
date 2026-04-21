@@ -79,6 +79,7 @@ export default function CampaignFormClient() {
   // CSV mode state
   const [csvText, setCsvText] = useState('')
   const [phoneField, setPhoneField] = useState('')
+  const [nameField, setNameField] = useState('__none__')
 
   // Contacts mode state
   const [contacts, setContacts] = useState<Contact[]>([])
@@ -104,7 +105,7 @@ export default function CampaignFormClient() {
   // CSV parsing
   const parsed = useMemo(() => parseCsv(csvText), [csvText])
 
-  // Auto-detect phone field for CSV
+  // Auto-detect phone/name fields for CSV
   useMemo(() => {
     if (parsed.headers.length > 0 && !phoneField) {
       const phoneHeader = parsed.headers.find(
@@ -115,7 +116,15 @@ export default function CampaignFormClient() {
       )
       setPhoneField(phoneHeader || parsed.headers[0])
     }
-  }, [parsed.headers, phoneField])
+    if (parsed.headers.length > 0 && nameField === '__none__') {
+      const nameHeader = parsed.headers.find(
+        (h) =>
+          h === '名前' || h === '氏名' || h === 'お名前' || h === '顧客名' || h === '店舗名' ||
+          h.toLowerCase() === 'name'
+      )
+      if (nameHeader) setNameField(nameHeader)
+    }
+  }, [parsed.headers, phoneField, nameField])
 
   // Fetch contacts
   const fetchContacts = async () => {
@@ -258,21 +267,18 @@ export default function CampaignFormClient() {
     return null
   }
 
-  // CSV送信先を contacts テーブルに自動登録（opt-out 追跡のため）
   const registerCsvContacts = async () => {
     if (sourceType !== 'csv') return
-    const nameField = parsed.headers.find(
-      (h) => h === 'name' || h === '名前' || h.toLowerCase().includes('name')
-    )
-    const contacts = parsed.rows.slice(0, count).map((row) => ({
+    const nf = nameField !== '__none__' ? nameField : null
+    const newContacts = parsed.rows.slice(0, count).map((row) => ({
       phone_number: row[phoneField],
-      ...(nameField && row[nameField] ? { name: row[nameField] } : {}),
+      ...(nf && row[nf] ? { name: row[nf] } : {}),
     }))
-    if (contacts.length === 0) return
+    if (newContacts.length === 0) return
     await fetch('/api/contacts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contacts }),
+      body: JSON.stringify({ contacts: newContacts }),
     })
   }
 
@@ -529,6 +535,28 @@ export default function CampaignFormClient() {
                         onChange={(e) => setPhoneField(e.target.value)}
                         className="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded appearance-none cursor-pointer pr-8 transition-all duration-150 hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
                       >
+                        {parsed.headers.map((header) => (
+                          <option key={header} value={header}>
+                            {header}
+                          </option>
+                        ))}
+                      </select>
+                      <CaretDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                      <Users className="w-4 h-4 text-gray-400" />
+                      名前の列
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={nameField}
+                        onChange={(e) => setNameField(e.target.value)}
+                        className="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded appearance-none cursor-pointer pr-8 transition-all duration-150 hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
+                      >
+                        <option value="__none__">なし</option>
                         {parsed.headers.map((header) => (
                           <option key={header} value={header}>
                             {header}
