@@ -171,7 +171,16 @@ export async function POST(request: NextRequest) {
 
     const updateContacts = contacts.filter(c => c.phone_number && existingPhones.has(c.phone_number))
 
-    const fields = ['name', 'tags', 'url', 'gender', 'list_type', 'call_result', 'prefecture', 'notes'] as const
+    const existingContacts = new Map<string, { tags: string[] }>()
+    if (updateContacts.length > 0) {
+      const { data: existingData } = await supabase
+        .from('contacts')
+        .select('phone_number, tags')
+        .in('phone_number', updateContacts.map(c => c.phone_number).filter(Boolean) as string[])
+      existingData?.forEach(e => existingContacts.set(e.phone_number, { tags: e.tags || [] }))
+    }
+
+    const fields = ['name', 'url', 'gender', 'list_type', 'call_result', 'prefecture', 'notes'] as const
     const updateOps = updateContacts.map(c => {
       const updates: Record<string, unknown> = {}
       for (const f of fields) {
@@ -179,6 +188,12 @@ export async function POST(request: NextRequest) {
         if (val !== undefined && val !== null && val !== '') {
           updates[f] = val
         }
+      }
+      const newTags = c.tags || []
+      if (newTags.length > 0) {
+        const existing = existingContacts.get(c.phone_number!)?.tags || []
+        const merged = Array.from(new Set([...existing, ...newTags]))
+        updates.tags = merged
       }
       return { phone_number: c.phone_number, updates }
     }).filter(op => Object.keys(op.updates).length > 0)
