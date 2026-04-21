@@ -30,6 +30,12 @@ interface ContactInfo {
   tags: string[]
   opted_out: boolean
   created_at: string
+  url: string | null
+  gender: string | null
+  list_type: string | null
+  status: string | null
+  prefecture: string | null
+  notes: string | null
 }
 
 function formatDate(iso: string): string {
@@ -129,15 +135,32 @@ export default function ContactDetailClient() {
         <>
           {/* Contact info */}
           <Card>
-            <div className="px-4 py-3 flex items-center gap-3 flex-wrap">
-              <span className="font-mono text-sm text-gray-700">{contact?.phone_number}</span>
-              {contact?.opted_out && <Badge variant="error">配信停止</Badge>}
-              {contact?.tags?.map(tag => (
-                <Badge key={tag} variant="default">{tag}</Badge>
-              ))}
-              <span className="text-xs text-gray-400 ml-auto">
-                登録: {contact?.created_at ? formatDate(contact.created_at) : '-'}
-              </span>
+            <div className="px-4 py-3 space-y-2">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="font-mono text-sm text-gray-700">{contact?.phone_number}</span>
+                {contact?.opted_out && <Badge variant="error">配信停止</Badge>}
+                {contact?.tags?.map(tag => (
+                  <Badge key={tag} variant="default">{tag}</Badge>
+                ))}
+                <span className="text-xs text-gray-400 ml-auto">
+                  登録: {contact?.created_at ? formatDate(contact.created_at) : '-'}
+                </span>
+              </div>
+              {(contact?.list_type || contact?.prefecture || contact?.gender || contact?.url) && (
+                <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
+                  {contact?.list_type && <span>{contact.list_type}</span>}
+                  {contact?.prefecture && <span>{contact.prefecture}</span>}
+                  {contact?.gender && <span>{contact.gender}</span>}
+                  {contact?.url && (
+                    <a href={contact.url} target="_blank" rel="noopener noreferrer" className="text-accent-600 hover:underline truncate max-w-xs">
+                      {contact.url}
+                    </a>
+                  )}
+                </div>
+              )}
+              {contact?.notes && (
+                <p className="text-xs text-gray-500">{contact.notes}</p>
+              )}
             </div>
           </Card>
 

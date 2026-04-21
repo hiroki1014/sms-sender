@@ -80,6 +80,10 @@ export default function CampaignFormClient() {
   const [csvText, setCsvText] = useState('')
   const [phoneField, setPhoneField] = useState('')
   const [nameField, setNameField] = useState('__none__')
+  const [extraFields, setExtraFields] = useState<Record<string, string>>({
+    url: '__none__', gender: '__none__', list_type: '__none__',
+    status: '__none__', prefecture: '__none__', notes: '__none__',
+  })
 
   // Contacts mode state
   const [contacts, setContacts] = useState<Contact[]>([])
@@ -124,6 +128,24 @@ export default function CampaignFormClient() {
       )
       if (nameHeader) setNameField(nameHeader)
     }
+    const autoDetect: Record<string, string[]> = {
+      url: ['URL', 'url', 'ショップURL'],
+      gender: ['性別', 'gender'],
+      list_type: ['リスト種別', '種別'],
+      status: ['ステータス', 'status'],
+      prefecture: ['都道府県', 'prefecture'],
+      notes: ['備考', 'メモ', 'notes', '備考（SMS）'],
+    }
+    setExtraFields(prev => {
+      const next = { ...prev }
+      for (const [key, keywords] of Object.entries(autoDetect)) {
+        if (next[key] === '__none__') {
+          const found = parsed.headers.find(h => keywords.some(k => h === k || h.toLowerCase() === k.toLowerCase()))
+          if (found) next[key] = found
+        }
+      }
+      return next
+    })
   }, [parsed.headers, phoneField, nameField])
 
   // Fetch contacts
@@ -270,10 +292,14 @@ export default function CampaignFormClient() {
   const registerCsvContacts = async () => {
     if (sourceType !== 'csv') return
     const nf = nameField !== '__none__' ? nameField : null
-    const newContacts = parsed.rows.slice(0, count).map((row) => ({
-      phone_number: row[phoneField],
-      ...(nf && row[nf] ? { name: row[nf] } : {}),
-    }))
+    const newContacts = parsed.rows.slice(0, count).map((row) => {
+      const c: Record<string, string | null> = { phone_number: row[phoneField] }
+      if (nf && row[nf]) c.name = row[nf]
+      for (const [key, col] of Object.entries(extraFields)) {
+        if (col !== '__none__' && row[col]) c[key] = row[col]
+      }
+      return c
+    })
     if (newContacts.length === 0) return
     await fetch('/api/contacts', {
       method: 'POST',
@@ -566,6 +592,34 @@ export default function CampaignFormClient() {
                       </select>
                       <CaretDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3 mt-2">
+                    {[
+                      { key: 'url', label: 'URL' },
+                      { key: 'gender', label: '性別' },
+                      { key: 'list_type', label: '種別' },
+                      { key: 'status', label: 'ステータス' },
+                      { key: 'prefecture', label: '都道府県' },
+                      { key: 'notes', label: 'メモ' },
+                    ].map(({ key, label }) => (
+                      <div key={key} className="space-y-1">
+                        <label className="text-xs text-gray-600">{label}</label>
+                        <div className="relative">
+                          <select
+                            value={extraFields[key]}
+                            onChange={(e) => setExtraFields(prev => ({ ...prev, [key]: e.target.value }))}
+                            className="w-full px-2 py-1.5 text-xs bg-white border border-gray-300 rounded appearance-none cursor-pointer pr-6 hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
+                          >
+                            <option value="__none__">なし</option>
+                            {parsed.headers.map((header) => (
+                              <option key={header} value={header}>{header}</option>
+                            ))}
+                          </select>
+                          <CaretDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                   </>
                 )}

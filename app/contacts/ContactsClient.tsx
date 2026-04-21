@@ -25,6 +25,12 @@ interface Contact {
   tags: string[]
   opted_out: boolean
   created_at: string
+  url: string | null
+  gender: string | null
+  list_type: string | null
+  status: string | null
+  prefecture: string | null
+  notes: string | null
   send_count?: number
   last_sent_at?: string | null
 }
@@ -218,10 +224,11 @@ export default function ContactsClient() {
               <tr>
                 <Th>電話番号</Th>
                 <Th>名前</Th>
+                <Th>種別</Th>
+                <Th>都道府県</Th>
                 <Th>タグ</Th>
                 <Th>配信</Th>
                 <Th>状態</Th>
-                <Th>登録日</Th>
                 <Th className="w-32">操作</Th>
               </tr>
             </TableHead>
@@ -238,6 +245,8 @@ export default function ContactsClient() {
                       {contact.name || '-'}
                     </Link>
                   </Td>
+                  <Td className="text-sm text-gray-600">{contact.list_type || '-'}</Td>
+                  <Td className="text-sm text-gray-600">{contact.prefecture || '-'}</Td>
                   <Td>
                     {editingContactId === contact.id ? (
                       <div className="flex flex-wrap items-center gap-1">

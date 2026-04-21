@@ -12,6 +12,12 @@ export default function ImportClient() {
   const [csvText, setCsvText] = useState('')
   const [phoneField, setPhoneField] = useState('')
   const [nameField, setNameField] = useState('')
+  const [urlField, setUrlField] = useState('')
+  const [genderField, setGenderField] = useState('')
+  const [listTypeField, setListTypeField] = useState('')
+  const [statusField, setStatusField] = useState('')
+  const [prefectureField, setPrefectureField] = useState('')
+  const [notesField, setNotesField] = useState('')
   const [tags, setTags] = useState('')
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<{ added: number; duplicates: number } | null>(null)
@@ -21,21 +27,29 @@ export default function ImportClient() {
 
   // フィールド自動検出
   useMemo(() => {
-    if (parsed.headers.length > 0) {
-      if (!phoneField) {
-        const phone = parsed.headers.find(
-          h => h.includes('電話') || h.toLowerCase().includes('phone') || h.toLowerCase().includes('tel')
-        )
-        setPhoneField(phone || parsed.headers[0])
-      }
-      if (!nameField) {
-        const name = parsed.headers.find(
-          h => h.includes('名前') || h.includes('氏名') || h.toLowerCase().includes('name')
-        )
-        setNameField(name || '')
-      }
+    if (parsed.headers.length === 0) return
+    const detect = (current: string, keywords: string[]) => {
+      if (current) return
+      return parsed.headers.find(h => keywords.some(k => h === k || h.toLowerCase() === k.toLowerCase())) || ''
     }
-  }, [parsed.headers, phoneField, nameField])
+    if (!phoneField) {
+      const found = parsed.headers.find(
+        h => h.includes('電話') || h.toLowerCase().includes('phone') || h.toLowerCase().includes('tel')
+      )
+      setPhoneField(found || parsed.headers[0])
+    }
+    const trySet = (setter: (v: string) => void, current: string, keywords: string[]) => {
+      const v = detect(current, keywords)
+      if (v !== undefined) setter(v)
+    }
+    trySet(setNameField, nameField, ['名前', '氏名', 'お名前', '顧客名', 'name'])
+    trySet(setUrlField, urlField, ['URL', 'url', 'ショップURL', 'サイトURL'])
+    trySet(setGenderField, genderField, ['性別', 'gender'])
+    trySet(setListTypeField, listTypeField, ['リスト種別', '種別', 'list_type'])
+    trySet(setStatusField, statusField, ['ステータス', 'status'])
+    trySet(setPrefectureField, prefectureField, ['都道府県', 'prefecture'])
+    trySet(setNotesField, notesField, ['備考', 'メモ', 'notes', '備考（SMS）'])
+  }, [parsed.headers, phoneField, nameField, urlField, genderField, listTypeField, statusField, prefectureField, notesField])
 
   const handleImport = async () => {
     setError('')
@@ -49,6 +63,12 @@ export default function ImportClient() {
         phone_number: row[phoneField],
         name: nameField ? row[nameField] : null,
         tags: tagList,
+        url: urlField ? row[urlField] || null : null,
+        gender: genderField ? row[genderField] || null : null,
+        list_type: listTypeField ? row[listTypeField] || null : null,
+        status: statusField ? row[statusField] || null : null,
+        prefecture: prefectureField ? row[prefectureField] || null : null,
+        notes: notesField ? row[notesField] || null : null,
       })).filter(c => c.phone_number)
 
       if (contacts.length === 0) {
@@ -107,6 +127,7 @@ export default function ImportClient() {
 
             {/* フィールドマッピング */}
             {parsed.headers.length > 0 && (
+              <>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
@@ -146,6 +167,35 @@ export default function ImportClient() {
                   </div>
                 </div>
               </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  { label: 'URL', value: urlField, setter: setUrlField },
+                  { label: '性別', value: genderField, setter: setGenderField },
+                  { label: 'リスト種別', value: listTypeField, setter: setListTypeField },
+                  { label: 'ステータス', value: statusField, setter: setStatusField },
+                  { label: '都道府県', value: prefectureField, setter: setPrefectureField },
+                  { label: 'メモ', value: notesField, setter: setNotesField },
+                ].map(({ label, value, setter }) => (
+                  <div key={label} className="space-y-1.5">
+                    <label className="text-xs font-medium text-gray-600">{label}</label>
+                    <div className="relative">
+                      <select
+                        value={value}
+                        onChange={(e) => setter(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-sm bg-white border border-gray-300 rounded appearance-none cursor-pointer pr-7 hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
+                      >
+                        <option value="">なし</option>
+                        {parsed.headers.map((header) => (
+                          <option key={header} value={header}>{header}</option>
+                        ))}
+                      </select>
+                      <CaretDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              </>
             )}
 
             {/* タグ */}

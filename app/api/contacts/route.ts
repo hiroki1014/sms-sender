@@ -11,6 +11,12 @@ export interface Contact {
   opted_out_at: string | null
   created_at: string
   updated_at: string
+  url: string | null
+  gender: string | null
+  list_type: string | null
+  status: string | null
+  prefecture: string | null
+  notes: string | null
   send_count?: number
   last_sent_at?: string | null
 }
@@ -118,6 +124,12 @@ export async function POST(request: NextRequest) {
         phone_number: c.phone_number,
         name: c.name || null,
         tags: c.tags || [],
+        url: c.url || null,
+        gender: c.gender || null,
+        list_type: c.list_type || null,
+        status: c.status || null,
+        prefecture: c.prefecture || null,
+        notes: c.notes || null,
       }))
 
     const duplicateCount = contacts.length - newContacts.length
