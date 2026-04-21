@@ -36,6 +36,19 @@ export async function sendCampaign({
   let failedCount = 0
   const results: SendResult[] = []
 
+  // opt-out チェック用: contact_id がある宛先は事前にまとめて確認
+  const contactIds = recipients.map(r => r.contact_id).filter(Boolean) as string[]
+  const optedOutIds = new Set<string>()
+  if (contactIds.length > 0) {
+    const supabaseCheck = getSupabase()
+    const { data: optedOut } = await supabaseCheck
+      .from('contacts')
+      .select('id')
+      .in('id', contactIds)
+      .eq('opted_out', true)
+    optedOut?.forEach(c => optedOutIds.add(c.id))
+  }
+
   for (const recipient of recipients) {
     if (!recipient.phone || !recipient.message) {
       failedCount++
@@ -43,6 +56,17 @@ export async function sendCampaign({
         phone: recipient.phone || '不明',
         success: false,
         error: '電話番号またはメッセージが空です',
+      })
+      continue
+    }
+
+    // 配信停止済みの連絡先はスキップ
+    if (recipient.contact_id && optedOutIds.has(recipient.contact_id)) {
+      failedCount++
+      results.push({
+        phone: recipient.phone,
+        success: false,
+        error: '配信停止中',
       })
       continue
     }

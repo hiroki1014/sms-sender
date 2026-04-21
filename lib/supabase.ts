@@ -82,6 +82,17 @@ export interface ClickLog {
   ip_address?: string | null
 }
 
+export interface IncomingMessage {
+  id?: string
+  twilio_sid?: string | null
+  from_number: string
+  to_number: string
+  body: string
+  contact_id?: string | null
+  received_at?: string
+  is_opt_out?: boolean
+}
+
 export async function saveSmsLog(log: Omit<SmsLog, 'id' | 'sent_at'>): Promise<void> {
   const supabase = getSupabase()
 
