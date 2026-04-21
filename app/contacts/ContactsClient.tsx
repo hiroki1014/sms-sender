@@ -28,7 +28,7 @@ interface Contact {
   url: string | null
   gender: string | null
   list_type: string | null
-  status: string | null
+  call_result: string | null
   prefecture: string | null
   notes: string | null
   send_count?: number

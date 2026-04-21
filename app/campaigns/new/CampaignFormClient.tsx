@@ -82,7 +82,7 @@ export default function CampaignFormClient() {
   const [nameField, setNameField] = useState('__none__')
   const [extraFields, setExtraFields] = useState<Record<string, string>>({
     url: '__none__', gender: '__none__', list_type: '__none__',
-    status: '__none__', prefecture: '__none__', notes: '__none__',
+    call_result: '__none__', prefecture: '__none__', notes: '__none__',
   })
 
   // Contacts mode state
@@ -132,7 +132,7 @@ export default function CampaignFormClient() {
       url: ['URL', 'url', 'ショップURL'],
       gender: ['性別', 'gender'],
       list_type: ['リスト種別', '種別'],
-      status: ['ステータス', 'status'],
+      call_result: ['ステータス', '架電結果', 'status', 'call_result'],
       prefecture: ['都道府県', 'prefecture'],
       notes: ['備考', 'メモ', 'notes', '備考（SMS）'],
     }
@@ -599,7 +599,7 @@ export default function CampaignFormClient() {
                       { key: 'url', label: 'URL' },
                       { key: 'gender', label: '性別' },
                       { key: 'list_type', label: '種別' },
-                      { key: 'status', label: 'ステータス' },
+                      { key: 'call_result', label: '架電結果' },
                       { key: 'prefecture', label: '都道府県' },
                       { key: 'notes', label: 'メモ' },
                     ].map(({ key, label }) => (

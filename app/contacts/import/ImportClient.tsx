@@ -15,7 +15,7 @@ export default function ImportClient() {
   const [urlField, setUrlField] = useState('')
   const [genderField, setGenderField] = useState('')
   const [listTypeField, setListTypeField] = useState('')
-  const [statusField, setStatusField] = useState('')
+  const [callResultField, setCallResultField] = useState('')
   const [prefectureField, setPrefectureField] = useState('')
   const [notesField, setNotesField] = useState('')
   const [tags, setTags] = useState('')
@@ -48,10 +48,10 @@ export default function ImportClient() {
     trySet(setUrlField, urlField, ['URL', 'url', 'ショップURL', 'サイトURL'])
     trySet(setGenderField, genderField, ['性別', 'gender'])
     trySet(setListTypeField, listTypeField, ['リスト種別', '種別', 'list_type'])
-    trySet(setStatusField, statusField, ['ステータス', 'status'])
+    trySet(setCallResultField, callResultField, ['ステータス', '架電結果', 'status', 'call_result'])
     trySet(setPrefectureField, prefectureField, ['都道府県', 'prefecture'])
     trySet(setNotesField, notesField, ['備考', 'メモ', 'notes', '備考（SMS）'])
-  }, [parsed.headers, phoneField, nameField, urlField, genderField, listTypeField, statusField, prefectureField, notesField])
+  }, [parsed.headers, phoneField, nameField, urlField, genderField, listTypeField, callResultField, prefectureField, notesField])
 
   const buildContacts = () => {
     const tagList = tags.split(',').map(t => t.trim()).filter(Boolean)
@@ -62,7 +62,7 @@ export default function ImportClient() {
       url: urlField ? row[urlField] || null : null,
       gender: genderField ? row[genderField] || null : null,
       list_type: listTypeField ? row[listTypeField] || null : null,
-      status: statusField ? row[statusField] || null : null,
+      call_result: callResultField ? row[callResultField] || null : null,
       prefecture: prefectureField ? row[prefectureField] || null : null,
       notes: notesField ? row[notesField] || null : null,
     })).filter(c => c.phone_number)
@@ -217,7 +217,7 @@ export default function ImportClient() {
                   { label: 'URL', value: urlField, setter: setUrlField },
                   { label: '性別', value: genderField, setter: setGenderField },
                   { label: 'リスト種別', value: listTypeField, setter: setListTypeField },
-                  { label: 'ステータス', value: statusField, setter: setStatusField },
+                  { label: '架電結果', value: callResultField, setter: setCallResultField },
                   { label: '都道府県', value: prefectureField, setter: setPrefectureField },
                   { label: 'メモ', value: notesField, setter: setNotesField },
                 ].map(({ label, value, setter }) => (

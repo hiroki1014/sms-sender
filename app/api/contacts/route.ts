@@ -14,7 +14,7 @@ export interface Contact {
   url: string | null
   gender: string | null
   list_type: string | null
-  status: string | null
+  call_result: string | null
   prefecture: string | null
   notes: string | null
   send_count?: number
@@ -126,14 +126,14 @@ export async function POST(request: NextRequest) {
         url: c.url || null,
         gender: c.gender || null,
         list_type: c.list_type || null,
-        status: c.status || null,
+        call_result: c.call_result || null,
         prefecture: c.prefecture || null,
         notes: c.notes || null,
       }))
 
     const updateContacts = contacts.filter(c => c.phone_number && existingPhones.has(c.phone_number))
 
-    const fields = ['name', 'tags', 'url', 'gender', 'list_type', 'status', 'prefecture', 'notes'] as const
+    const fields = ['name', 'tags', 'url', 'gender', 'list_type', 'call_result', 'prefecture', 'notes'] as const
     const updateOps = updateContacts.map(c => {
       const updates: Record<string, unknown> = {}
       for (const f of fields) {
