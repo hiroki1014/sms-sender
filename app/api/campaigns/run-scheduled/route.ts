@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 export async function POST(request: NextRequest) {
+  let id: string | undefined
   try {
     const authenticated = await isAuthenticated()
     if (!authenticated) {
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { id } = body as { id?: string }
+    id = (body as { id?: string }).id
 
     if (!id) {
       return NextResponse.json({ error: 'キャンペーンIDが必要です' }, { status: 400 })
