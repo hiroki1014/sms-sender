@@ -210,12 +210,12 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
       click_rate: c.click_rate,
     }))
 
-  // CPC: sms_logs の price 合計 / クリック総数
+  // CPC: sms_logs の price 合計 / キャンペーンごとのユニーククリック合計
   const totalCost = smsLogs?.reduce((sum, l) => sum + (Number(l.price) || 0), 0) || 0
   const cpc = {
     total_cost: totalCost,
-    total_clicks: totalClicks,
-    cpc: totalClicks > 0 ? Math.round((totalCost / totalClicks) * 100) / 100 : 0,
+    total_clicks: totalUniqueClicks,
+    cpc: totalUniqueClicks > 0 ? Math.round((totalCost / totalUniqueClicks) * 100) / 100 : 0,
   }
 
   // リピーター: contact_id ごとにクリックされたキャンペーンの Set を作る

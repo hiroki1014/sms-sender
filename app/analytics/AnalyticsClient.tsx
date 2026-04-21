@@ -190,7 +190,7 @@ export default function AnalyticsClient() {
                 icon={<CursorClick className="w-5 h-5" />}
                 label="CPC"
                 value={`¥${data.charts.cpc.cpc}`}
-                subValue={`総額 ¥${data.charts.cpc.total_cost.toLocaleString()} / ${data.charts.cpc.total_clicks.toLocaleString()}クリック`}
+                subValue={`総額 ¥${data.charts.cpc.total_cost.toLocaleString()} / ${data.charts.cpc.total_clicks.toLocaleString()}ユニーククリック`}
                 color="text-accent-500"
               />
             )}
