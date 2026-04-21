@@ -90,7 +90,7 @@ export default function ImportClient() {
         return
       }
 
-      setResult({ added: data.added, duplicates: data.duplicates })
+      setResult({ added: data.added, updated: data.updated || 0, duplicates: data.duplicates })
     } catch {
       setError('インポートに失敗しました')
     } finally {

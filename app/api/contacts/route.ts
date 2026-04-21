@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
 
     let updatedCount = 0
     const fields = ['name', 'tags', 'url', 'gender', 'list_type', 'status', 'prefecture', 'notes'] as const
-    for (const c of updateContacts) {
+    const updateOps = updateContacts.map(c => {
       const updates: Record<string, unknown> = {}
       for (const f of fields) {
         const val = c[f]
@@ -151,11 +151,17 @@ export async function POST(request: NextRequest) {
           updates[f] = val
         }
       }
-      if (Object.keys(updates).length > 0) {
-        await supabase.from('contacts').update(updates).eq('phone_number', c.phone_number)
-        updatedCount++
-      }
+      return { phone_number: c.phone_number, updates }
+    }).filter(op => Object.keys(op.updates).length > 0)
+
+    const BATCH_SIZE = 20
+    for (let i = 0; i < updateOps.length; i += BATCH_SIZE) {
+      const batch = updateOps.slice(i, i + BATCH_SIZE)
+      await Promise.all(
+        batch.map(op => supabase.from('contacts').update(op.updates).eq('phone_number', op.phone_number))
+      )
     }
+    updatedCount = updateOps.length
 
     return NextResponse.json({
       added: newContacts.length,
