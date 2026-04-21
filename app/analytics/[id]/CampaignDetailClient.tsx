@@ -6,6 +6,8 @@ import AppLayout from '@/components/AppLayout'
 import { Alert, Badge, Card } from '@/components/ui'
 import { Table, TableHead, TableBody, Th, Td, Tr } from '@/components/ui'
 import { ArrowLeft, CursorClick, Envelope, PaperPlaneTilt, X, Clock, Funnel, MagnifyingGlass } from '@phosphor-icons/react'
+import TimeToClickChart from '@/components/charts/TimeToClickChart'
+import TagBreakdownChart from '@/components/charts/TagBreakdownChart'
 
 interface Recipient {
   contact_id: string | null
@@ -39,6 +41,10 @@ interface CampaignStats {
 interface DetailData {
   campaign: CampaignStats
   recipients: Recipient[]
+  charts?: {
+    timeToClick: Array<{ bucket: string; count: number }>
+    tagBreakdown: Array<{ tag: string; sent: number; clicked: number; rate: number }>
+  }
 }
 
 const DELIVERED = new Set(['delivered', 'read', 'sent'])
@@ -140,6 +146,20 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
             <StatCard icon={<CursorClick className="w-5 h-5" />} label="クリック数" value={`${data.campaign.click_count} (${data.campaign.unique_click_count}人)`} color="text-warning" />
             <StatCard icon={<Clock className="w-5 h-5" />} label="クリック率" value={`${data.campaign.click_rate}%`} color="text-accent-600" />
           </div>
+
+          {/* Charts */}
+          {data.charts && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <Card className="p-4">
+                <TimeToClickChart data={data.charts.timeToClick} />
+              </Card>
+              {data.charts.tagBreakdown.length > 0 && (
+                <Card className="p-4">
+                  <TagBreakdownChart data={data.charts.tagBreakdown} />
+                </Card>
+              )}
+            </div>
+          )}
 
           {/* Per-recipient */}
           <Card>

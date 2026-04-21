@@ -16,6 +16,8 @@ import {
   ArrowsClockwise
 } from '@phosphor-icons/react'
 import { Button } from '@/components/ui'
+import ClickHeatmap from '@/components/charts/ClickHeatmap'
+import TrendChart from '@/components/charts/TrendChart'
 
 interface CampaignStats {
   campaign_id: string
@@ -49,6 +51,12 @@ interface OverallStats {
 interface AnalyticsData {
   overall: OverallStats
   campaigns: CampaignStats[]
+  charts?: {
+    clickHeatmap: Array<{ day: number; hour: number; count: number }>
+    trend: Array<{ name: string; delivery_rate: number; click_rate: number }>
+    cpc: { total_cost: number; total_clicks: number; cpc: number }
+    repeaters: { multi_click_contacts: number; zero_click_contacts: number; total_contacts: number }
+  }
 }
 
 export default function AnalyticsClient() {
@@ -150,7 +158,7 @@ export default function AnalyticsClient() {
       ) : (
         <>
           {/* Summary Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
             <StatCard
               icon={<PaperPlaneTilt className="w-5 h-5" />}
               label="総送信数"
@@ -177,7 +185,37 @@ export default function AnalyticsClient() {
               value={`${data.overall.overall_click_rate}%`}
               color="text-accent-600"
             />
+            {data.charts && (
+              <StatCard
+                icon={<CursorClick className="w-5 h-5" />}
+                label="CPC"
+                value={`¥${data.charts.cpc.cpc}`}
+                subValue={`総額 ¥${data.charts.cpc.total_cost.toLocaleString()} / ${data.charts.cpc.total_clicks.toLocaleString()}クリック`}
+                color="text-accent-500"
+              />
+            )}
+            {data.charts && (
+              <StatCard
+                icon={<Check className="w-5 h-5" />}
+                label="リピーター"
+                value={`${data.charts.repeaters.multi_click_contacts}人`}
+                subValue={`未反応 ${data.charts.repeaters.zero_click_contacts}人 / 全${data.charts.repeaters.total_contacts}人`}
+                color="text-warning"
+              />
+            )}
           </div>
+
+          {/* Charts */}
+          {data.charts && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <Card className="p-4">
+                <ClickHeatmap data={data.charts.clickHeatmap} />
+              </Card>
+              <Card className="p-4">
+                <TrendChart data={data.charts.trend} />
+              </Card>
+            </div>
+          )}
 
           {/* Campaign Table */}
           <Card>
