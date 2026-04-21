@@ -89,7 +89,16 @@ export default function CampaignFormClient() {
   // Contacts mode state
   const [contacts, setContacts] = useState<Contact[]>([])
   const [allTags, setAllTags] = useState<string[]>([])
+  const [allListTypes, setAllListTypes] = useState<string[]>([])
+  const [allCallResults, setAllCallResults] = useState<string[]>([])
+  const [allPrefectures, setAllPrefectures] = useState<string[]>([])
+  const [allCampaigns, setAllCampaigns] = useState<Array<{ id: string; name: string }>>([])
   const [selectedTag, setSelectedTag] = useState('')
+  const [selectedListType, setSelectedListType] = useState('')
+  const [selectedCallResult, setSelectedCallResult] = useState('')
+  const [selectedPrefecture, setSelectedPrefecture] = useState('')
+  const [excludeCampaignIds, setExcludeCampaignIds] = useState<string[]>([])
+  const [unsentOnly, setUnsentOnly] = useState(false)
   const [contactsLoading, setContactsLoading] = useState(false)
 
   // Shared state
@@ -149,12 +158,26 @@ export default function CampaignFormClient() {
     })
   }, [parsed.headers, phoneField, nameField])
 
+  // Fetch campaigns list (for exclusion filter)
+  useEffect(() => {
+    fetch('/api/campaigns')
+      .then(r => r.json())
+      .then(d => {
+        if (d.campaigns) {
+          setAllCampaigns(d.campaigns.filter((c: { status: string }) => c.status === 'sent' || c.status === 'sending').map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })))
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   // Fetch contacts
   const fetchContacts = async () => {
     setContactsLoading(true)
     try {
       const params = new URLSearchParams()
       if (selectedTag) params.set('tag', selectedTag)
+      if (excludeCampaignIds.length > 0) params.set('excludeCampaigns', excludeCampaignIds.join(','))
+      if (unsentOnly) params.set('unsentOnly', 'true')
 
       const res = await fetch(`/api/contacts?${params}`)
       const data = await res.json()
@@ -162,10 +185,20 @@ export default function CampaignFormClient() {
       if (res.ok) {
         setContacts(data.contacts)
 
-        // Extract all tags
         const tags = new Set<string>()
-        data.contacts.forEach((c: Contact) => c.tags.forEach(t => tags.add(t)))
+        const listTypes = new Set<string>()
+        const callResults = new Set<string>()
+        const prefectures = new Set<string>()
+        data.contacts.forEach((c: Contact & { list_type?: string; call_result?: string; prefecture?: string }) => {
+          c.tags.forEach(t => tags.add(t))
+          if (c.list_type) listTypes.add(c.list_type)
+          if (c.call_result) callResults.add(c.call_result)
+          if (c.prefecture) prefectures.add(c.prefecture)
+        })
         setAllTags(Array.from(tags).sort())
+        setAllListTypes(Array.from(listTypes).sort())
+        setAllCallResults(Array.from(callResults).sort())
+        setAllPrefectures(Array.from(prefectures).sort())
       }
     } catch {
       setError('顧客の取得に失敗しました')
@@ -178,7 +211,17 @@ export default function CampaignFormClient() {
     if (sourceType === 'contacts') {
       fetchContacts()
     }
-  }, [sourceType, selectedTag])
+  }, [sourceType, selectedTag, excludeCampaignIds, unsentOnly])
+
+  // Client-side filtering for contacts mode
+  const filteredContacts = useMemo(() => {
+    return contacts.filter(c => {
+      if (selectedListType && (c as Contact & { list_type?: string }).list_type !== selectedListType) return false
+      if (selectedCallResult && (c as Contact & { call_result?: string }).call_result !== selectedCallResult) return false
+      if (selectedPrefecture && (c as Contact & { prefecture?: string }).prefecture !== selectedPrefecture) return false
+      return true
+    })
+  }, [contacts, selectedListType, selectedCallResult, selectedPrefecture])
 
   // Calculate recipients based on source type
   const recipients = useMemo(() => {
@@ -188,7 +231,7 @@ export default function CampaignFormClient() {
         message: replaceVariables(template, row),
       }))
     } else {
-      return contacts.slice(0, count).map((contact) => ({
+      return filteredContacts.slice(0, count).map((contact) => ({
         phone: contact.phone_number,
         message: replaceVariables(template, {
           name: contact.name || '',
@@ -197,7 +240,7 @@ export default function CampaignFormClient() {
         contact_id: contact.id,
       }))
     }
-  }, [sourceType, parsed.rows, contacts, count, phoneField, template])
+  }, [sourceType, parsed.rows, filteredContacts, count, phoneField, template])
 
   // Available variables for template
   const availableVariables = useMemo(() => {
@@ -212,14 +255,14 @@ export default function CampaignFormClient() {
     if (sourceType === 'csv') {
       return parsed.rows
     }
-    return contacts.map(c => ({
+    return filteredContacts.map(c => ({
       name: c.name || '',
       phone: c.phone_number,
     }))
-  }, [sourceType, parsed.rows, contacts])
+  }, [sourceType, parsed.rows, filteredContacts])
 
   // Max count
-  const maxCount = sourceType === 'csv' ? parsed.rows.length : contacts.length
+  const maxCount = sourceType === 'csv' ? parsed.rows.length : filteredContacts.length
 
   // Adjust count when source changes
   useEffect(() => {
@@ -509,22 +552,96 @@ export default function CampaignFormClient() {
 
             {/* Contacts Mode */}
             {sourceType === 'contacts' && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-4 p-3 bg-gray-50 rounded">
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-3 p-3 bg-gray-50 rounded">
                   <div className="flex items-center gap-2">
                     <Funnel className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm text-gray-600">タグで絞り込み:</span>
+                    <span className="text-sm text-gray-600">絞り込み:</span>
                   </div>
                   <select
                     value={selectedTag}
                     onChange={(e) => setSelectedTag(e.target.value)}
                     className="px-2.5 py-1.5 text-sm border border-gray-300 rounded hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
                   >
-                    <option value="">すべての顧客</option>
+                    <option value="">すべてのタグ</option>
                     {allTags.map(tag => (
                       <option key={tag} value={tag}>{tag}</option>
                     ))}
                   </select>
+                  {allListTypes.length > 0 && (
+                    <select
+                      value={selectedListType}
+                      onChange={(e) => setSelectedListType(e.target.value)}
+                      className="px-2.5 py-1.5 text-sm border border-gray-300 rounded hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
+                    >
+                      <option value="">すべての種別</option>
+                      {allListTypes.map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  )}
+                  {allCallResults.length > 0 && (
+                    <select
+                      value={selectedCallResult}
+                      onChange={(e) => setSelectedCallResult(e.target.value)}
+                      className="px-2.5 py-1.5 text-sm border border-gray-300 rounded hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
+                    >
+                      <option value="">すべての架電結果</option>
+                      {allCallResults.map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  )}
+                  {allPrefectures.length > 0 && (
+                    <select
+                      value={selectedPrefecture}
+                      onChange={(e) => setSelectedPrefecture(e.target.value)}
+                      className="px-2.5 py-1.5 text-sm border border-gray-300 rounded hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
+                    >
+                      <option value="">すべての都道府県</option>
+                      {allPrefectures.map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 p-3 bg-gray-50 rounded">
+                  <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={unsentOnly}
+                      onChange={(e) => setUnsentOnly(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 text-accent-500 focus:ring-accent-400/20"
+                    />
+                    未送信の人のみ
+                  </label>
+                  {allCampaigns.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600">除外:</span>
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value && !excludeCampaignIds.includes(e.target.value)) {
+                            setExcludeCampaignIds([...excludeCampaignIds, e.target.value])
+                          }
+                        }}
+                        className="px-2.5 py-1.5 text-sm border border-gray-300 rounded hover:border-gray-400 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/20 focus:outline-none"
+                      >
+                        <option value="">送信済みキャンペーンを除外...</option>
+                        {allCampaigns.filter(c => !excludeCampaignIds.includes(c.id)).map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  {excludeCampaignIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {excludeCampaignIds.map(id => {
+                        const camp = allCampaigns.find(c => c.id === id)
+                        return (
+                          <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-200 text-gray-700 rounded">
+                            {camp?.name || id}
+                            <button onClick={() => setExcludeCampaignIds(excludeCampaignIds.filter(i => i !== id))} className="hover:text-gray-900">×</button>
+                          </span>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {contactsLoading ? (
@@ -535,11 +652,11 @@ export default function CampaignFormClient() {
                 ) : (
                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
                     <span className="text-sm text-gray-600">
-                      対象顧客: <span className="font-medium text-gray-900">{contacts.length}件</span>
+                      対象顧客: <span className="font-medium text-gray-900">{filteredContacts.length}件</span>
+                      {filteredContacts.length !== contacts.length && (
+                        <span className="text-gray-400 ml-1">（全{contacts.length}件中）</span>
+                      )}
                     </span>
-                    {selectedTag && (
-                      <Badge variant="accent">{selectedTag}</Badge>
-                    )}
                   </div>
                 )}
               </div>

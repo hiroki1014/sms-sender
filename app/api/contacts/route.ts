@@ -34,6 +34,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const tag = searchParams.get('tag')
     const includeOptedOut = searchParams.get('includeOptedOut') === 'true'
+    const excludeCampaigns = searchParams.get('excludeCampaigns')
+    const unsentOnly = searchParams.get('unsentOnly') === 'true'
 
     const supabase = getSupabase()
     let query = supabase
@@ -50,6 +52,40 @@ export async function GET(request: NextRequest) {
     }
 
     const { data, error } = await query
+
+    if (!error && data && (excludeCampaigns || unsentOnly)) {
+      let excludeContactIds = new Set<string>()
+
+      if (excludeCampaigns) {
+        const campaignIds = excludeCampaigns.split(',').filter(Boolean)
+        if (campaignIds.length > 0) {
+          const { data: logs } = await supabase
+            .from('sms_logs')
+            .select('contact_id')
+            .in('campaign_id', campaignIds)
+            .not('contact_id', 'is', null)
+          logs?.forEach(l => excludeContactIds.add(l.contact_id))
+        }
+      }
+
+      if (unsentOnly) {
+        const { data: allLogs } = await supabase
+          .from('sms_logs')
+          .select('contact_id')
+          .not('contact_id', 'is', null)
+        const sentContactIds = new Set<string>()
+        allLogs?.forEach(l => sentContactIds.add(l.contact_id))
+        const filtered = data.filter(c => !sentContactIds.has(c.id))
+        data.length = 0
+        data.push(...filtered)
+      }
+
+      if (excludeContactIds.size > 0) {
+        const filtered = data.filter(c => !excludeContactIds.has(c.id))
+        data.length = 0
+        data.push(...filtered)
+      }
+    }
 
     if (error) {
       console.error('Get contacts error:', error)
