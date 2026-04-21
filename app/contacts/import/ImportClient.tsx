@@ -21,7 +21,7 @@ export default function ImportClient() {
   const [tags, setTags] = useState('')
   const [importing, setImporting] = useState(false)
   const [checking, setChecking] = useState(false)
-  const [preview, setPreview] = useState<{ added: number; updated: number; duplicates: number } | null>(null)
+  const [preview, setPreview] = useState<{ added: number; updated: number; duplicates: number; skipped: number } | null>(null)
   const [result, setResult] = useState<{ added: number; updated?: number; duplicates: number } | null>(null)
   const [error, setError] = useState('')
 
@@ -74,6 +74,7 @@ export default function ImportClient() {
     setChecking(true)
     try {
       const contacts = buildContacts()
+      const skipped = parsed.rows.length - contacts.length
       if (contacts.length === 0) {
         setError('インポートする顧客がありません')
         return
@@ -85,7 +86,7 @@ export default function ImportClient() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
-      setPreview({ added: data.added, updated: data.updated, duplicates: data.duplicates })
+      setPreview({ added: data.added, updated: data.updated, duplicates: data.duplicates, skipped })
     } catch {
       setError('確認に失敗しました')
     } finally {
@@ -307,7 +308,7 @@ export default function ImportClient() {
         {/* 確認結果 */}
         {preview && (
           <Alert variant="info" title="インポート内容の確認">
-            <p>新規追加: {preview.added}件 / 更新: {preview.updated}件 / 変更なし: {preview.duplicates}件</p>
+            <p>新規追加: {preview.added}件 / 更新: {preview.updated}件 / 変更なし: {preview.duplicates}件{preview.skipped > 0 && ` / 電話番号なし: ${preview.skipped}件`}</p>
           </Alert>
         )}
 
