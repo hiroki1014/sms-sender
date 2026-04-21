@@ -31,7 +31,7 @@ interface OverallStats {
   overall_click_rate: number
 }
 
-const DELIVERED_STATUSES = new Set(['delivered', 'read'])
+const DELIVERED_STATUSES = new Set(['delivered', 'read', 'sent'])
 const UNDELIVERED_STATUSES = new Set(['undelivered', 'failed', 'canceled'])
 
 export async function GET(request: NextRequest) {

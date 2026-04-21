@@ -41,7 +41,7 @@ interface DetailData {
   recipients: Recipient[]
 }
 
-const DELIVERED = new Set(['delivered', 'read'])
+const DELIVERED = new Set(['delivered', 'read', 'sent'])
 const UNDELIVERED = new Set(['undelivered', 'failed', 'canceled'])
 
 function deliveryBadge(status: string | null) {

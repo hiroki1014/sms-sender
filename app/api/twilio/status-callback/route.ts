@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Twilio from 'twilio'
 import { getSupabase, TwilioDeliveryStatus } from '@/lib/supabase'
+import { describeTwilioError } from '@/lib/twilio-errors'
 
 export const dynamic = 'force-dynamic'
 
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     if ((status === 'undelivered' || status === 'failed') && errorCode) {
-      updates.error_message = `Twilio error ${errorCode}`
+      updates.error_message = describeTwilioError(errorCode)
     }
 
     const { error } = await supabase

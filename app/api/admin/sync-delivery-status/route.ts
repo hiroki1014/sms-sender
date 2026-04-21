@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Twilio from 'twilio'
 import { isAuthenticated } from '@/lib/auth'
 import { getSupabase, TwilioDeliveryStatus } from '@/lib/supabase'
+import { describeTwilioError } from '@/lib/twilio-errors'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -24,7 +25,7 @@ async function processLog(
       delivery_updated_at: new Date().toISOString(),
     }
     if (msg.errorCode) {
-      updates.error_message = `Twilio error ${msg.errorCode}${msg.errorMessage ? `: ${msg.errorMessage}` : ''}`
+      updates.error_message = describeTwilioError(msg.errorCode, msg.errorMessage || undefined)
     }
     if (msg.price) {
       updates.price = Math.abs(parseFloat(msg.price))
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const UNFINISHED = ['queued', 'sending', 'accepted', 'sent']
+    const UNFINISHED = ['queued', 'sending', 'accepted']
 
     const supabase = getSupabase()
     const { data: logs, error } = await supabase
