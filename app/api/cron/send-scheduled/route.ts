@@ -3,6 +3,7 @@ import { getSupabase, Campaign } from '@/lib/supabase'
 import { sendCampaign } from '@/lib/send-campaign'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 300
 
 interface CampaignResult {
   id: string
