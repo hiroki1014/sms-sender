@@ -258,6 +258,24 @@ export default function CampaignFormClient() {
     return null
   }
 
+  // CSV送信先を contacts テーブルに自動登録（opt-out 追跡のため）
+  const registerCsvContacts = async () => {
+    if (sourceType !== 'csv') return
+    const nameField = parsed.headers.find(
+      (h) => h === 'name' || h === '名前' || h.toLowerCase().includes('name')
+    )
+    const contacts = parsed.rows.slice(0, count).map((row) => ({
+      phone_number: row[phoneField],
+      ...(nameField && row[nameField] ? { name: row[nameField] } : {}),
+    }))
+    if (contacts.length === 0) return
+    await fetch('/api/contacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contacts }),
+    })
+  }
+
   // 予約送信（日時指定）
   const handleSchedule = async () => {
     if (!campaignName.trim()) {
@@ -284,6 +302,9 @@ export default function CampaignFormClient() {
     setIsSending(true)
 
     try {
+      // CSV送信先を連絡先に自動登録
+      await registerCsvContacts()
+
       const res = await fetch('/api/campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -329,6 +350,11 @@ export default function CampaignFormClient() {
     setIsSending(true)
 
     try {
+      // CSV送信先を連絡先に自動登録
+      if (!dryRun) {
+        await registerCsvContacts()
+      }
+
       // Create campaign first (if not dry run)
       let campaignId: string | undefined
 

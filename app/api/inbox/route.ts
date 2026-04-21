@@ -1,8 +1,10 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { isAuthenticated } from '@/lib/auth'
 import { getSupabase } from '@/lib/supabase'
 
-export async function GET() {
+export const dynamic = 'force-dynamic'
+
+export async function GET(request: NextRequest) {
   try {
     const authenticated = await isAuthenticated()
     if (!authenticated) {
@@ -10,6 +12,19 @@ export async function GET() {
     }
 
     const supabase = getSupabase()
+    const { searchParams } = new URL(request.url)
+
+    if (searchParams.get('unread_count') === 'true') {
+      const { count, error: countError } = await supabase
+        .from('incoming_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_read', false)
+      if (countError) {
+        return NextResponse.json({ error: '未読数の取得に失敗しました' }, { status: 500 })
+      }
+      return NextResponse.json({ unread_count: count || 0 })
+    }
+
     const { data, error } = await supabase
       .from('incoming_messages')
       .select('*')

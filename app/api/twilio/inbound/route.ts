@@ -78,8 +78,18 @@ export async function POST(request: NextRequest) {
       .limit(1)
       .single()
 
-    const contactId = contact?.id || null
+    let contactId = contact?.id || null
     const optOut = isOptOut(body)
+
+    // opt-out かつ未登録番号の場合、連絡先を自動作成
+    if (!contactId && optOut) {
+      const { data: newContact } = await supabase
+        .from('contacts')
+        .insert([{ phone_number: domesticNumber, opted_out: true, opted_out_at: new Date().toISOString() }])
+        .select('id')
+        .single()
+      contactId = newContact?.id || null
+    }
 
     // 受信メッセージを保存
     await supabase

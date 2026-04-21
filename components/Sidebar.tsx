@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -29,6 +30,20 @@ const navItems = [
 
 export default function Sidebar({ onLogout }: SidebarProps) {
   const pathname = usePathname()
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    const fetchUnread = async () => {
+      try {
+        const res = await fetch('/api/inbox?unread_count=true')
+        const data = await res.json()
+        if (res.ok) setUnreadCount(data.unread_count || 0)
+      } catch { /* silent */ }
+    }
+    fetchUnread()
+    const interval = setInterval(fetchUnread, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <aside className="w-56 h-screen bg-white border-r border-gray-200 flex flex-col">
@@ -66,6 +81,11 @@ export default function Sidebar({ onLogout }: SidebarProps) {
                 weight={isActive ? 'fill' : 'regular'}
               />
               {item.label}
+              {item.href === '/inbox' && unreadCount > 0 && (
+                <span className="ml-auto bg-accent-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
             </Link>
           )
         })}

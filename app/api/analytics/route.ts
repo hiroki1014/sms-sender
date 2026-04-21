@@ -69,7 +69,7 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
   const { data: campaigns } = await supabase
     .from('campaigns')
     .select('id, name, sent_at, status')
-    .eq('status', 'sent')
+    .in('status', ['sent', 'sending'])
     .order('sent_at', { ascending: false })
 
   if (!campaigns || campaigns.length === 0) {

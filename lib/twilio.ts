@@ -34,6 +34,13 @@ export function normalizePhoneNumber(phone: string): string {
   return '+' + digits
 }
 
+export function toDomesticFormat(phone: string): string {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.startsWith('81')) return '0' + digits.slice(2)
+  if (digits.startsWith('0')) return digits
+  return digits
+}
+
 export function validatePhoneNumber(phone: string): boolean {
   const normalized = normalizePhoneNumber(phone)
   // 日本の携帯電話番号: +81 + 90/80/70 + 8桁

@@ -91,6 +91,7 @@ export interface IncomingMessage {
   contact_id?: string | null
   received_at?: string
   is_opt_out?: boolean
+  is_read?: boolean
 }
 
 export async function saveSmsLog(log: Omit<SmsLog, 'id' | 'sent_at'>): Promise<void> {
