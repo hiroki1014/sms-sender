@@ -112,6 +112,28 @@ export default function ImportClient() {
                 <FileArrowUp className="w-4 h-4 text-gray-400" />
                 CSVデータ
               </label>
+              <div className="flex items-center gap-3">
+                <label className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-all duration-150">
+                  ファイルを選択
+                  <input
+                    type="file"
+                    accept=".csv,.tsv,.txt"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      const reader = new FileReader()
+                      reader.onload = (ev) => {
+                        const text = ev.target?.result
+                        if (typeof text === 'string') setCsvText(text)
+                      }
+                      reader.readAsText(file, 'UTF-8')
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+                <span className="text-xs text-gray-500">または下のテキストエリアに直接貼り付け</span>
+              </div>
               <textarea
                 value={csvText}
                 onChange={(e) => setCsvText(e.target.value)}
@@ -121,7 +143,7 @@ export default function ImportClient() {
 09087654321,山田花子`}
               />
               <p className="text-xs text-gray-500">
-                1行目はヘッダー行です。電話番号は090/080/070形式で入力してください。
+                1行目はヘッダー行です。CSV・TSV形式に対応。
               </p>
             </div>
 
