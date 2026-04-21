@@ -20,6 +20,8 @@ export default function ImportClient() {
   const [notesField, setNotesField] = useState('')
   const [tags, setTags] = useState('')
   const [importing, setImporting] = useState(false)
+  const [checking, setChecking] = useState(false)
+  const [preview, setPreview] = useState<{ added: number; updated: number; duplicates: number } | null>(null)
   const [result, setResult] = useState<{ added: number; updated?: number; duplicates: number } | null>(null)
   const [error, setError] = useState('')
 
@@ -51,46 +53,66 @@ export default function ImportClient() {
     trySet(setNotesField, notesField, ['備考', 'メモ', 'notes', '備考（SMS）'])
   }, [parsed.headers, phoneField, nameField, urlField, genderField, listTypeField, statusField, prefectureField, notesField])
 
+  const buildContacts = () => {
+    const tagList = tags.split(',').map(t => t.trim()).filter(Boolean)
+    return parsed.rows.map(row => ({
+      phone_number: row[phoneField],
+      name: nameField ? row[nameField] : null,
+      tags: tagList,
+      url: urlField ? row[urlField] || null : null,
+      gender: genderField ? row[genderField] || null : null,
+      list_type: listTypeField ? row[listTypeField] || null : null,
+      status: statusField ? row[statusField] || null : null,
+      prefecture: prefectureField ? row[prefectureField] || null : null,
+      notes: notesField ? row[notesField] || null : null,
+    })).filter(c => c.phone_number)
+  }
+
+  const handleCheck = async () => {
+    setError('')
+    setPreview(null)
+    setChecking(true)
+    try {
+      const contacts = buildContacts()
+      if (contacts.length === 0) {
+        setError('インポートする顧客がありません')
+        return
+      }
+      const res = await fetch('/api/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contacts, dry_run: true }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error); return }
+      setPreview({ added: data.added, updated: data.updated, duplicates: data.duplicates })
+    } catch {
+      setError('確認に失敗しました')
+    } finally {
+      setChecking(false)
+    }
+  }
+
   const handleImport = async () => {
     setError('')
     setResult(null)
     setImporting(true)
-
     try {
-      const tagList = tags.split(',').map(t => t.trim()).filter(Boolean)
-
-      const contacts = parsed.rows.map(row => ({
-        phone_number: row[phoneField],
-        name: nameField ? row[nameField] : null,
-        tags: tagList,
-        url: urlField ? row[urlField] || null : null,
-        gender: genderField ? row[genderField] || null : null,
-        list_type: listTypeField ? row[listTypeField] || null : null,
-        status: statusField ? row[statusField] || null : null,
-        prefecture: prefectureField ? row[prefectureField] || null : null,
-        notes: notesField ? row[notesField] || null : null,
-      })).filter(c => c.phone_number)
-
+      const contacts = buildContacts()
       if (contacts.length === 0) {
         setError('インポートする顧客がありません')
         setImporting(false)
         return
       }
-
       const res = await fetch('/api/contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contacts }),
       })
-
       const data = await res.json()
-
-      if (!res.ok) {
-        setError(data.error)
-        return
-      }
-
+      if (!res.ok) { setError(data.error); return }
       setResult({ added: data.added, updated: data.updated || 0, duplicates: data.duplicates })
+      setPreview(null)
     } catch {
       setError('インポートに失敗しました')
     } finally {
@@ -282,6 +304,13 @@ export default function ImportClient() {
           </Alert>
         )}
 
+        {/* 確認結果 */}
+        {preview && (
+          <Alert variant="info" title="インポート内容の確認">
+            <p>新規追加: {preview.added}件 / 更新: {preview.updated}件 / 変更なし: {preview.duplicates}件</p>
+          </Alert>
+        )}
+
         {/* ボタン */}
         <div className="flex gap-3">
           <Link href="/contacts" className="flex-1">
@@ -289,6 +318,15 @@ export default function ImportClient() {
               キャンセル
             </Button>
           </Link>
+          <Button
+            variant="secondary"
+            onClick={handleCheck}
+            disabled={checking || parsed.rows.length === 0}
+            loading={checking}
+            className="flex-1"
+          >
+            {checking ? '確認中...' : 'インポート内容を確認'}
+          </Button>
           <Button
             variant="primary"
             onClick={handleImport}

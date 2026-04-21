@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { contacts } = body as { contacts: Partial<Contact>[] }
+    const { contacts, dry_run } = body as { contacts: Partial<Contact>[]; dry_run?: boolean }
 
     if (!contacts || !Array.isArray(contacts) || contacts.length === 0) {
       return NextResponse.json({ error: '顧客データが必要です' }, { status: 400 })
@@ -133,15 +133,6 @@ export async function POST(request: NextRequest) {
 
     const updateContacts = contacts.filter(c => c.phone_number && existingPhones.has(c.phone_number))
 
-    if (newContacts.length > 0) {
-      const { error } = await supabase.from('contacts').insert(newContacts)
-      if (error) {
-        console.error('Insert contacts error:', error)
-        return NextResponse.json({ error: '顧客の追加に失敗しました' }, { status: 500 })
-      }
-    }
-
-    let updatedCount = 0
     const fields = ['name', 'tags', 'url', 'gender', 'list_type', 'status', 'prefecture', 'notes'] as const
     const updateOps = updateContacts.map(c => {
       const updates: Record<string, unknown> = {}
@@ -154,6 +145,24 @@ export async function POST(request: NextRequest) {
       return { phone_number: c.phone_number, updates }
     }).filter(op => Object.keys(op.updates).length > 0)
 
+    if (dry_run) {
+      return NextResponse.json({
+        dry_run: true,
+        added: newContacts.length,
+        updated: updateOps.length,
+        duplicates: updateContacts.length - updateOps.length,
+        total: contacts.length,
+      })
+    }
+
+    if (newContacts.length > 0) {
+      const { error } = await supabase.from('contacts').insert(newContacts)
+      if (error) {
+        console.error('Insert contacts error:', error)
+        return NextResponse.json({ error: '顧客の追加に失敗しました' }, { status: 500 })
+      }
+    }
+
     const BATCH_SIZE = 20
     for (let i = 0; i < updateOps.length; i += BATCH_SIZE) {
       const batch = updateOps.slice(i, i + BATCH_SIZE)
@@ -161,12 +170,11 @@ export async function POST(request: NextRequest) {
         batch.map(op => supabase.from('contacts').update(op.updates).eq('phone_number', op.phone_number))
       )
     }
-    updatedCount = updateOps.length
 
     return NextResponse.json({
       added: newContacts.length,
-      updated: updatedCount,
-      duplicates: updateContacts.length - updatedCount,
+      updated: updateOps.length,
+      duplicates: updateContacts.length - updateOps.length,
       total: contacts.length,
     })
   } catch (error) {
