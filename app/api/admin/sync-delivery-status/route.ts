@@ -4,9 +4,50 @@ import { isAuthenticated } from '@/lib/auth'
 import { getSupabase, TwilioDeliveryStatus } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 300
 
-// Twilio API から該当メッセージの最新ステータスを取得して sms_logs を更新
+async function processLog(
+  client: Twilio.Twilio,
+  supabase: ReturnType<typeof getSupabase>,
+  log: { id: string; twilio_sid: string; delivery_status: string | null }
+): Promise<{ sid: string; status: string | null; action: 'updated' | 'unchanged' | 'failed'; error?: string }> {
+  try {
+    const msg = await client.messages(log.twilio_sid).fetch()
+    const status = msg.status as TwilioDeliveryStatus
+
+    if (status === log.delivery_status) {
+      return { sid: log.twilio_sid, status, action: 'unchanged' }
+    }
+
+    const updates: Record<string, unknown> = {
+      delivery_status: status,
+      delivery_updated_at: new Date().toISOString(),
+    }
+    if (msg.errorCode) {
+      updates.error_message = `Twilio error ${msg.errorCode}${msg.errorMessage ? `: ${msg.errorMessage}` : ''}`
+    }
+    if (msg.price) {
+      updates.price = Math.abs(parseFloat(msg.price))
+    }
+    if (msg.numSegments) {
+      updates.num_segments = parseInt(msg.numSegments, 10)
+    }
+
+    const { error } = await supabase
+      .from('sms_logs')
+      .update(updates)
+      .eq('id', log.id)
+
+    if (error) {
+      return { sid: log.twilio_sid, status, action: 'failed', error: error.message }
+    }
+    return { sid: log.twilio_sid, status, action: 'updated' }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { sid: log.twilio_sid, status: null, action: 'failed', error: message }
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const authenticated = await isAuthenticated()
@@ -23,7 +64,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 対象: twilio_sid が入っていて delivery_status が未確定 (null or queued/sending/accepted/sent)
     const UNFINISHED = ['queued', 'sending', 'accepted', 'sent']
 
     const supabase = getSupabase()
@@ -39,63 +79,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'DB取得に失敗しました' }, { status: 500 })
     }
 
+    const validLogs = (logs || []).filter(l => l.twilio_sid) as Array<{ id: string; twilio_sid: string; delivery_status: string | null }>
     const client = Twilio(accountSid, authToken)
-    let updated = 0
-    let unchanged = 0
-    let failed = 0
-    const details: Array<{ sid: string; status: string | null; error?: string }> = []
 
-    for (const log of logs || []) {
-      if (!log.twilio_sid) continue
-      try {
-        const msg = await client.messages(log.twilio_sid).fetch()
-        const status = msg.status as TwilioDeliveryStatus
+    // 並列10で Twilio API を叩く
+    const CONCURRENCY = 10
+    const results: Array<{ sid: string; status: string | null; action: string; error?: string }> = []
 
-        if (status === log.delivery_status) {
-          unchanged++
-          details.push({ sid: log.twilio_sid, status })
-          continue
-        }
-
-        const updates: Record<string, unknown> = {
-          delivery_status: status,
-          delivery_updated_at: new Date().toISOString(),
-        }
-        if (msg.errorCode) {
-          updates.error_message = `Twilio error ${msg.errorCode}${msg.errorMessage ? `: ${msg.errorMessage}` : ''}`
-        }
-        if (msg.price) {
-          updates.price = Math.abs(parseFloat(msg.price))
-        }
-        if (msg.numSegments) {
-          updates.num_segments = parseInt(msg.numSegments, 10)
-        }
-
-        const { error: upErr } = await supabase
-          .from('sms_logs')
-          .update(updates)
-          .eq('id', log.id)
-
-        if (upErr) {
-          failed++
-          details.push({ sid: log.twilio_sid, status, error: upErr.message })
-        } else {
-          updated++
-          details.push({ sid: log.twilio_sid, status })
-        }
-      } catch (err) {
-        failed++
-        const message = err instanceof Error ? err.message : String(err)
-        details.push({ sid: log.twilio_sid, status: null, error: message })
-      }
+    for (let i = 0; i < validLogs.length; i += CONCURRENCY) {
+      const batch = validLogs.slice(i, i + CONCURRENCY)
+      const batchResults = await Promise.all(
+        batch.map(log => processLog(client, supabase, log))
+      )
+      results.push(...batchResults)
     }
 
+    const updated = results.filter(r => r.action === 'updated').length
+    const unchanged = results.filter(r => r.action === 'unchanged').length
+    const failed = results.filter(r => r.action === 'failed').length
+
     return NextResponse.json({
-      scanned: logs?.length || 0,
+      scanned: validLogs.length,
       updated,
       unchanged,
       failed,
-      details,
+      details: results,
     })
   } catch (error) {
     console.error('Sync delivery status error:', error)
