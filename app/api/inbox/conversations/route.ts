@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { isAuthenticated } from '@/lib/auth'
-import { getSupabase } from '@/lib/supabase'
+import { getSupabase, fetchAll, fetchAllByIn } from '@/lib/supabase'
 import { toDomesticFormat } from '@/lib/twilio'
 
 export const dynamic = 'force-dynamic'
@@ -14,26 +14,30 @@ export async function GET() {
 
     const supabase = getSupabase()
 
-    const { data: incoming } = await supabase
+    const incoming = await fetchAll(s => s
       .from('incoming_messages')
       .select('from_number, body, received_at, is_read, is_opt_out, contact_id')
       .order('received_at', { ascending: false })
+      .order('id', { ascending: true })
+    )
 
-    const { data: outgoing } = await supabase
+    const outgoing = await fetchAll(s => s
       .from('sms_logs')
       .select('phone_number, message, sent_at')
       .order('sent_at', { ascending: false })
+      .order('id', { ascending: true })
+    )
 
     const contactIds = Array.from(
-      new Set((incoming || []).map(m => m.contact_id).filter(Boolean))
+      new Set(incoming.map(m => m.contact_id).filter(Boolean))
     )
     let contactMap: Record<string, { name: string; opted_out: boolean }> = {}
     if (contactIds.length > 0) {
-      const { data: contacts } = await supabase
-        .from('contacts')
-        .select('id, name, phone_number, opted_out')
-        .in('id', contactIds)
-      contacts?.forEach(c => {
+      const contacts = await fetchAllByIn(
+        (s, batch) => s.from('contacts').select('id, name, phone_number, opted_out').in('id', batch).order('id', { ascending: true }),
+        contactIds
+      )
+      contacts.forEach(c => {
         contactMap[c.id] = { name: c.name || c.phone_number, opted_out: c.opted_out || false }
       })
     }
@@ -47,7 +51,7 @@ export async function GET() {
       is_opted_out: boolean
     }> = {}
 
-    for (const msg of incoming || []) {
+    for (const msg of incoming) {
       const phone = toDomesticFormat(msg.from_number)
       if (!groups[phone]) {
         const contact = msg.contact_id ? contactMap[msg.contact_id] : null
@@ -65,7 +69,7 @@ export async function GET() {
       }
     }
 
-    for (const msg of outgoing || []) {
+    for (const msg of outgoing) {
       const phone = toDomesticFormat(msg.phone_number)
       if (!groups[phone]) {
         groups[phone] = {

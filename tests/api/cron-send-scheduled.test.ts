@@ -51,6 +51,7 @@ describe('GET /api/cron/send-scheduled', () => {
   })
 
   it('due なキャンペーン0件なら空結果を返す', async () => {
+    // fetchAll for campaigns returns empty
     enqueueQueryResult([])
     const res = await GET(authedRequest('test-secret'))
     const data = await res.json()
@@ -65,7 +66,7 @@ describe('GET /api/cron/send-scheduled', () => {
       { phone: '08012345678', message: 'hello Jiro' },
     ]
 
-    // 1) fetch due campaigns
+    // 1) fetchAll: due campaigns
     enqueueQueryResult([
       {
         id: 'c1',
@@ -76,8 +77,8 @@ describe('GET /api/cron/send-scheduled', () => {
         recipients_snapshot: recipients,
       },
     ])
-    // 2) lock update (scheduled -> sending)
-    enqueueQueryResult(null, null)
+    // 2) lock update (scheduled -> sending) - must return array with item for lockData.length check
+    enqueueQueryResult([{ id: 'c1' }])
     // 3) finalize update (sending -> sent)
     enqueueQueryResult(null, null)
 
@@ -110,6 +111,7 @@ describe('GET /api/cron/send-scheduled', () => {
   })
 
   it('recipients_snapshot が空なら sendCampaign を呼ばずに sent', async () => {
+    // 1) fetchAll: due campaigns
     enqueueQueryResult([
       {
         id: 'c2',
@@ -120,8 +122,10 @@ describe('GET /api/cron/send-scheduled', () => {
         recipients_snapshot: [],
       },
     ])
-    enqueueQueryResult(null, null) // lock
-    enqueueQueryResult(null, null) // finalize
+    // 2) lock - must return array with item
+    enqueueQueryResult([{ id: 'c2' }])
+    // 3) finalize update (empty recipients -> sent)
+    enqueueQueryResult(null, null)
 
     const res = await GET(authedRequest('test-secret'))
     const data = await res.json()

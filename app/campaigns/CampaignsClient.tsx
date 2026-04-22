@@ -12,7 +12,8 @@ import {
   Megaphone,
   XCircle,
   Play,
-  Copy
+  Copy,
+  ArrowCounterClockwise
 } from '@phosphor-icons/react'
 
 interface Campaign {
@@ -97,6 +98,21 @@ export default function CampaignsClient() {
       }
     } catch {
       setError('キャンセルに失敗しました')
+    }
+  }
+
+  const handleReset = async (id: string) => {
+    if (!confirm('このキャンペーンを予約済みに戻しますか？\n・成功済み → 再送信しない\n・失敗 → 再試行する\n・未確定 → 自動再送しない（要確認）')) return
+    try {
+      const res = await fetch(`/api/campaigns/${id}/reset`, { method: 'POST' })
+      if (res.ok) {
+        fetchCampaigns()
+      } else {
+        const data = await res.json()
+        setError(data.error || 'リセットに失敗しました')
+      }
+    } catch {
+      setError('リセットに失敗しました')
     }
   }
 
@@ -219,24 +235,31 @@ export default function CampaignsClient() {
                   </Td>
                   <Td>
                     <div className="flex items-center gap-1">
-                      {(campaign.status === 'scheduled' || campaign.status === 'sending') && (
+                      {campaign.status === 'sending' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleReset(campaign.id)}
+                          icon={<ArrowCounterClockwise className="w-4 h-4 text-warning" />}
+                          title="予約済みに戻す"
+                        />
+                      )}
+                      {campaign.status === 'scheduled' && (
                         <>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleRunNow(campaign.id)}
                             icon={<Play className="w-4 h-4 text-accent-600" />}
-                            title={campaign.status === 'sending' ? '再実行' : '今すぐ実行'}
+                            title="今すぐ実行"
                           />
-                          {campaign.status === 'scheduled' && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleCancel(campaign.id)}
-                              icon={<XCircle className="w-4 h-4 text-warning" />}
-                              title="予約キャンセル"
-                            />
-                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleCancel(campaign.id)}
+                            icon={<XCircle className="w-4 h-4 text-warning" />}
+                            title="予約キャンセル"
+                          />
                         </>
                       )}
                       <Link href={`/campaigns/new?template=${encodeURIComponent(campaign.message_template)}&name=${encodeURIComponent(campaign.name + '（コピー）')}`}>

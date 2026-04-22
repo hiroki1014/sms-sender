@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthenticated } from '@/lib/auth'
-import { getSupabase } from '@/lib/supabase'
+import { getSupabase, fetchAll, fetchAllByIn } from '@/lib/supabase'
 import { normalizePhoneNumber, toDomesticFormat } from '@/lib/twilio'
 
 export const dynamic = 'force-dynamic'
@@ -30,33 +30,37 @@ export async function GET(
 
     const supabase = getSupabase()
 
-    const { data: incoming } = await supabase
+    const incoming = await fetchAll(s => s
       .from('incoming_messages')
       .select('id, body, received_at, is_opt_out, is_read')
       .or(`from_number.eq.${domestic},from_number.eq.${e164}`)
       .order('received_at', { ascending: true })
+      .order('id', { ascending: true })
+    )
 
-    const { data: outgoing } = await supabase
+    const outgoing = await fetchAll(s => s
       .from('sms_logs')
       .select('id, message, sent_at, campaign_id')
       .or(`phone_number.eq.${domestic},phone_number.eq.${e164}`)
       .order('sent_at', { ascending: true })
+      .order('id', { ascending: true })
+    )
 
     const campaignIds = Array.from(
-      new Set((outgoing || []).map(m => m.campaign_id).filter(Boolean))
+      new Set(outgoing.map(m => m.campaign_id).filter(Boolean))
     )
     let campaignMap: Record<string, string> = {}
     if (campaignIds.length > 0) {
-      const { data: campaigns } = await supabase
-        .from('campaigns')
-        .select('id, name')
-        .in('id', campaignIds)
-      campaigns?.forEach(c => { campaignMap[c.id] = c.name })
+      const campaigns = await fetchAllByIn(
+        (s, batch) => s.from('campaigns').select('id, name').in('id', batch).order('id', { ascending: true }),
+        campaignIds
+      )
+      campaigns.forEach(c => { campaignMap[c.id] = c.name })
     }
 
     const messages: ThreadMessage[] = []
 
-    for (const msg of incoming || []) {
+    for (const msg of incoming) {
       messages.push({
         id: msg.id,
         direction: 'inbound',
@@ -66,7 +70,7 @@ export async function GET(
       })
     }
 
-    for (const msg of outgoing || []) {
+    for (const msg of outgoing) {
       messages.push({
         id: msg.id,
         direction: 'outbound',
@@ -78,14 +82,17 @@ export async function GET(
 
     messages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
 
-    const unreadIds = (incoming || [])
+    const unreadIds = incoming
       .filter(m => !m.is_read)
       .map(m => m.id)
     if (unreadIds.length > 0) {
-      await supabase
-        .from('incoming_messages')
-        .update({ is_read: true })
-        .in('id', unreadIds)
+      const BATCH = 100
+      for (let i = 0; i < unreadIds.length; i += BATCH) {
+        await supabase
+          .from('incoming_messages')
+          .update({ is_read: true })
+          .in('id', unreadIds.slice(i, i + BATCH))
+      }
     }
 
     const { data: contact } = await supabase

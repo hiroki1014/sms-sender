@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthenticated } from '@/lib/auth'
-import { getSupabase, Campaign } from '@/lib/supabase'
+import { getSupabase, fetchAll, Campaign } from '@/lib/supabase'
 
 // キャンペーン一覧取得
 export async function GET(request: NextRequest) {
@@ -13,22 +13,11 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
 
-    const supabase = getSupabase()
-    let query = supabase
-      .from('campaigns')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (status) {
-      query = query.eq('status', status)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
-      console.error('Get campaigns error:', error)
-      return NextResponse.json({ error: 'キャンペーンの取得に失敗しました' }, { status: 500 })
-    }
+    const data = await fetchAll(s => {
+      let q = s.from('campaigns').select('*').order('created_at', { ascending: false }).order('id', { ascending: true })
+      if (status) q = q.eq('status', status)
+      return q
+    })
 
     return NextResponse.json({ campaigns: data })
   } catch (error) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthenticated } from '@/lib/auth'
-import { getSupabase } from '@/lib/supabase'
+import { getSupabase, fetchAll, fetchAllByIn } from '@/lib/supabase'
 
 interface CampaignStats {
   campaign_id: string
@@ -79,13 +79,15 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
   charts: OverallCharts
 }> {
   // キャンペーン一覧を取得
-  const { data: campaigns } = await supabase
+  const campaigns = await fetchAll(s => s
     .from('campaigns')
     .select('id, name, sent_at, status')
     .in('status', ['sent', 'sending'])
     .order('sent_at', { ascending: false })
+    .order('id', { ascending: true })
+  )
 
-  if (!campaigns || campaigns.length === 0) {
+  if (campaigns.length === 0) {
     return {
       overall: {
         total_campaigns: 0,
@@ -112,30 +114,29 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
   const campaignIds = campaigns.map(c => c.id)
 
   // SMS送信統計を取得
-  const { data: smsLogs } = await supabase
-    .from('sms_logs')
-    .select('campaign_id, status, delivery_status, price')
-    .in('campaign_id', campaignIds)
+  const smsLogs = await fetchAllByIn(
+    (s, batch) => s.from('sms_logs').select('campaign_id, status, delivery_status, price').in('campaign_id', batch).order('id', { ascending: true }),
+    campaignIds
+  )
 
   // クリック統計を取得（short_urlsとclick_logsをJOIN）
-  const { data: shortUrls } = await supabase
-    .from('short_urls')
-    .select('id, campaign_id, contact_id')
-    .in('campaign_id', campaignIds)
+  const shortUrls = await fetchAllByIn(
+    (s, batch) => s.from('short_urls').select('id, campaign_id, contact_id').in('campaign_id', batch).order('id', { ascending: true }),
+    campaignIds
+  )
 
-  const shortUrlIds = shortUrls?.map(s => s.id) || []
+  const shortUrlIds = shortUrls.map(s => s.id)
 
-  const { data: clickLogs } = shortUrlIds.length > 0
-    ? await supabase
-        .from('click_logs')
-        .select('short_url_id, clicked_at')
-        .in('short_url_id', shortUrlIds)
-        .limit(10000)
-    : { data: [] }
+  const clickLogs = shortUrlIds.length > 0
+    ? await fetchAllByIn(
+        (s, batch) => s.from('click_logs').select('short_url_id, clicked_at').in('short_url_id', batch).order('id', { ascending: true }),
+        shortUrlIds
+      )
+    : []
 
   // キャンペーンごとの統計を計算
   const campaignStats: CampaignStats[] = campaigns.map(campaign => {
-    const campaignLogs = smsLogs?.filter(l => l.campaign_id === campaign.id) || []
+    const campaignLogs = smsLogs.filter(l => l.campaign_id === campaign.id && l.status !== 'pending')
     const successCount = campaignLogs.filter(l => l.status === 'success').length
     const failedCount = campaignLogs.filter(l => l.status === 'failed').length
     const totalSent = campaignLogs.length
@@ -150,8 +151,8 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
     const pendingCount = successCount - deliveredCount - undeliveredCount
 
     // このキャンペーンのshort_urlsに紐づくクリック数
-    const campaignShortUrlIds = shortUrls?.filter(s => s.campaign_id === campaign.id).map(s => s.id) || []
-    const campaignClicks = clickLogs?.filter(c => campaignShortUrlIds.includes(c.short_url_id)) || []
+    const campaignShortUrlIds = shortUrls.filter(s => s.campaign_id === campaign.id).map(s => s.id)
+    const campaignClicks = clickLogs.filter(c => campaignShortUrlIds.includes(c.short_url_id))
     const clickCount = campaignClicks.length
     const uniqueClickCount = new Set(campaignClicks.map(c => c.short_url_id)).size
 
@@ -186,7 +187,7 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
 
   // ヒートマップ: clicked_at を JST に変換し曜日×時間帯で集計
   const heatmapMap = new Map<string, number>()
-  clickLogs?.forEach(click => {
+  clickLogs.forEach(click => {
     const d = new Date(click.clicked_at)
     // UTC→JST (+9h)
     const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000)
@@ -211,7 +212,7 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
     }))
 
   // CPC: sms_logs の price 合計 / キャンペーンごとのユニーククリック合計
-  const totalCost = smsLogs?.reduce((sum, l) => sum + (Number(l.price) || 0), 0) || 0
+  const totalCost = smsLogs.filter(l => l.status !== 'pending').reduce((sum, l) => sum + (Number(l.price) || 0), 0)
   const cpc = {
     total_cost: totalCost,
     total_clicks: totalUniqueClicks,
@@ -220,9 +221,9 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
 
   // リピーター: contact_id ごとにクリックされたキャンペーンの Set を作る
   const contactCampaignMap = new Map<string, Set<string>>()
-  shortUrls?.forEach(su => {
+  shortUrls.forEach(su => {
     if (!su.contact_id) return
-    const suClicks = clickLogs?.filter(c => c.short_url_id === su.id) || []
+    const suClicks = clickLogs.filter(c => c.short_url_id === su.id)
     if (suClicks.length === 0) return
     if (!contactCampaignMap.has(su.contact_id)) {
       contactCampaignMap.set(su.contact_id, new Set())
@@ -273,7 +274,7 @@ interface RecipientDetail {
   contact_id: string | null
   phone_number: string
   contact_name: string | null
-  send_status: 'success' | 'failed' | null
+  send_status: 'success' | 'failed' | 'pending' | null
   delivery_status: string | null
   sent_at: string | null
   error_message: string | null
@@ -302,63 +303,67 @@ async function getCampaignDetailStats(
   }
 
   // SMS送信統計
-  const { data: smsLogs } = await supabase
+  const smsLogs = await fetchAll(s => s
     .from('sms_logs')
     .select('id, status, contact_id, phone_number, delivery_status, sent_at, error_message')
     .eq('campaign_id', campaignId)
     .order('sent_at', { ascending: false })
+    .order('id', { ascending: true })
+  )
 
-  const successCount = smsLogs?.filter(l => l.status === 'success').length || 0
-  const failedCount = smsLogs?.filter(l => l.status === 'failed').length || 0
+  const completedLogs = smsLogs.filter(l => l.status !== 'pending')
+  const successCount = completedLogs.filter(l => l.status === 'success').length
+  const failedCount = completedLogs.filter(l => l.status === 'failed').length
+  const totalSent = completedLogs.length
   const deliveredCount =
-    smsLogs?.filter(l => l.delivery_status && DELIVERED_STATUSES.has(l.delivery_status)).length || 0
+    completedLogs.filter(l => l.delivery_status && DELIVERED_STATUSES.has(l.delivery_status)).length
   const undeliveredCount =
-    smsLogs?.filter(l => l.delivery_status && UNDELIVERED_STATUSES.has(l.delivery_status)).length || 0
+    completedLogs.filter(l => l.delivery_status && UNDELIVERED_STATUSES.has(l.delivery_status)).length
   const pendingCount = Math.max(0, successCount - deliveredCount - undeliveredCount)
 
   // 短縮URL情報 (sms_log_id を含めて取得 — CSV送信の場合は contact_id が無いため sms_log_id 経由で紐付け)
-  const { data: shortUrls } = await supabase
+  const shortUrls = await fetchAll(s => s
     .from('short_urls')
     .select('id, contact_id, sms_log_id')
     .eq('campaign_id', campaignId)
+    .order('id', { ascending: true })
+  )
 
-  const shortUrlIds = shortUrls?.map(s => s.id) || []
+  const shortUrlIds = shortUrls.map(s => s.id)
 
   // クリックログ
-  const { data: clickLogs } = shortUrlIds.length > 0
-    ? await supabase
-        .from('click_logs')
-        .select('short_url_id, clicked_at')
-        .in('short_url_id', shortUrlIds)
-        .order('clicked_at', { ascending: true })
-    : { data: [] }
+  const clickLogs = shortUrlIds.length > 0
+    ? await fetchAllByIn(
+        (s, batch) => s.from('click_logs').select('short_url_id, clicked_at').in('short_url_id', batch).order('clicked_at', { ascending: true }).order('id', { ascending: true }),
+        shortUrlIds
+      )
+    : []
 
   // 顧客情報を取得（contact_id + phone_number の両方で引く）
-  const contactIds = Array.from(new Set(shortUrls?.map(s => s.contact_id).filter(Boolean) || []))
-  const phoneNumbers = Array.from(new Set(smsLogs?.map(l => l.phone_number).filter(Boolean) || []))
+  const contactIds = Array.from(new Set(shortUrls.map(s => s.contact_id).filter(Boolean)))
+  const phoneNumbers = Array.from(new Set(smsLogs.map(l => l.phone_number).filter(Boolean)))
   let contacts: Array<{ id: string; name: string | null; phone_number: string; tags: string[] }> = []
   if (contactIds.length > 0) {
-    const { data } = await supabase
-      .from('contacts')
-      .select('id, name, phone_number, tags')
-      .in('id', contactIds)
-    if (data) contacts = data
+    contacts = await fetchAllByIn(
+      (s, batch) => s.from('contacts').select('id, name, phone_number, tags').in('id', batch).order('id', { ascending: true }),
+      contactIds
+    )
   }
   if (phoneNumbers.length > 0) {
     const existingPhones = new Set(contacts.map(c => c.phone_number))
     const missingPhones = phoneNumbers.filter(p => !existingPhones.has(p))
     if (missingPhones.length > 0) {
-      const { data } = await supabase
-        .from('contacts')
-        .select('id, name, phone_number, tags')
-        .in('phone_number', missingPhones)
-      if (data) contacts = [...contacts, ...data]
+      const byPhone = await fetchAllByIn(
+        (s, batch) => s.from('contacts').select('id, name, phone_number, tags').in('phone_number', batch).order('id', { ascending: true }),
+        missingPhones
+      )
+      contacts = [...contacts, ...byPhone]
     }
   }
 
   // 顧客ごとのクリック統計
   const clicksByShortUrl = new Map<string, { count: number; first: string; last: string }>()
-  clickLogs?.forEach(click => {
+  clickLogs.forEach(click => {
     const existing = clicksByShortUrl.get(click.short_url_id)
     if (existing) {
       existing.count++
@@ -374,7 +379,7 @@ async function getCampaignDetailStats(
 
   // sms_log_id 経由の集計（CSV送信でも contact_id 無しでも紐付けられる）
   const clicksPerSmsLog = new Map<string, { count: number; first: string; last: string }>()
-  shortUrls?.forEach(shortUrl => {
+  shortUrls.forEach(shortUrl => {
     const clickData = clicksByShortUrl.get(shortUrl.id)
     if (!clickData || !shortUrl.sms_log_id) return
     const key = shortUrl.sms_log_id
@@ -393,7 +398,7 @@ async function getCampaignDetailStats(
   })
 
   // 全受信者の行を構築（sms_log.id を主キーとしてクリックを紐付け）
-  const recipients: RecipientDetail[] = (smsLogs || []).map(log => {
+  const recipients: RecipientDetail[] = smsLogs.map(log => {
     const contact = log.contact_id
       ? contacts?.find(c => c.id === log.contact_id)
       : contacts?.find(c => c.phone_number === log.phone_number) || null
@@ -402,7 +407,7 @@ async function getCampaignDetailStats(
       contact_id: log.contact_id || null,
       phone_number: log.phone_number,
       contact_name: contact?.name || null,
-      send_status: log.status as 'success' | 'failed',
+      send_status: log.status as 'success' | 'failed' | 'pending',
       delivery_status: log.delivery_status || null,
       sent_at: log.sent_at || null,
       error_message: log.error_message || null,
@@ -412,7 +417,7 @@ async function getCampaignDetailStats(
     }
   })
 
-  const clickCount = clickLogs?.length || 0
+  const clickCount = clickLogs.length
   const uniqueClickCount = clicksByShortUrl.size
 
   // --- Charts ---
@@ -433,16 +438,16 @@ async function getCampaignDetailStats(
 
   // sms_log_id → sent_at のマップ
   const smsLogSentAt = new Map<string, string>()
-  smsLogs?.forEach(log => {
+  smsLogs.forEach(log => {
     if (log.sent_at) smsLogSentAt.set(log.id, log.sent_at)
   })
 
   // short_url.sms_log_id 経由で click_logs と sms_logs を結合
-  shortUrls?.forEach(su => {
+  shortUrls.forEach(su => {
     if (!su.sms_log_id) return
     const sentAt = smsLogSentAt.get(su.sms_log_id)
     if (!sentAt) return
-    const suClicks = clickLogs?.filter(c => c.short_url_id === su.id) || []
+    const suClicks = clickLogs.filter(c => c.short_url_id === su.id)
     suClicks.forEach(click => {
       const diffMinutes = (new Date(click.clicked_at).getTime() - new Date(sentAt).getTime()) / (1000 * 60)
       const bucket = TIME_BUCKETS.find(b => diffMinutes < b.max) || TIME_BUCKETS[TIME_BUCKETS.length - 1]
@@ -458,7 +463,7 @@ async function getCampaignDetailStats(
   // tagBreakdown: タグごとに送信数とクリック数を集計
   // sms_logs.contact_id → contacts.tags
   const contactTagsMap = new Map<string, string[]>()
-  contacts?.forEach(c => {
+  contacts.forEach(c => {
     if (c.tags && Array.isArray(c.tags) && c.tags.length > 0) {
       contactTagsMap.set(c.id, c.tags as string[])
     }
@@ -466,16 +471,16 @@ async function getCampaignDetailStats(
 
   // クリックした contact_id の Set
   const clickedContactIds = new Set<string>()
-  shortUrls?.forEach(su => {
+  shortUrls.forEach(su => {
     if (!su.contact_id) return
-    const hasClick = clickLogs?.some(c => c.short_url_id === su.id) || false
+    const hasClick = clickLogs.some(c => c.short_url_id === su.id)
     if (hasClick) clickedContactIds.add(su.contact_id)
   })
 
   const tagSent = new Map<string, number>()
   const tagClicked = new Map<string, number>()
 
-  smsLogs?.forEach(log => {
+  completedLogs.forEach(log => {
     if (!log.contact_id) return
     const tags = contactTagsMap.get(log.contact_id)
     if (!tags) return
@@ -502,7 +507,7 @@ async function getCampaignDetailStats(
       campaign_id: campaign.id,
       campaign_name: campaign.name,
       sent_at: campaign.sent_at,
-      total_sent: (smsLogs?.length || 0),
+      total_sent: completedLogs.length,
       success_count: successCount,
       failed_count: failedCount,
       delivered_count: deliveredCount,

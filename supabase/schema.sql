@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS sms_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   phone_number TEXT NOT NULL,
   message TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('success', 'failed')),
+  status TEXT NOT NULL CHECK (status IN ('success', 'failed', 'pending')),
   error_message TEXT,
   sent_at TIMESTAMPTZ DEFAULT NOW()
 );

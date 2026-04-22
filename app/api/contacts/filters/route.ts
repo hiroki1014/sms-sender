@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { isAuthenticated } from '@/lib/auth'
-import { getSupabase } from '@/lib/supabase'
+import { fetchAll } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,18 +11,18 @@ export async function GET() {
       return NextResponse.json({ error: '認証が必要です' }, { status: 401 })
     }
 
-    const supabase = getSupabase()
-
-    const { data } = await supabase
+    const data = await fetchAll(s => s
       .from('contacts')
       .select('tags, list_type, call_result, prefecture')
+      .order('id', { ascending: true })
+    )
 
     const tags = new Set<string>()
     const listTypes = new Set<string>()
     const callResults = new Set<string>()
     const prefectures = new Set<string>()
 
-    data?.forEach(c => {
+    data.forEach(c => {
       ;(c.tags || []).forEach((t: string) => tags.add(t))
       if (c.list_type) listTypes.add(c.list_type)
       if (c.call_result) callResults.add(c.call_result)

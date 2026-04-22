@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthenticated } from '@/lib/auth'
-import { getSupabase } from '@/lib/supabase'
+import { getSupabase, fetchAll, fetchAllByIn } from '@/lib/supabase'
 
 export const maxDuration = 60
 
@@ -38,70 +38,61 @@ export async function GET(request: NextRequest) {
     const unsentOnly = searchParams.get('unsentOnly') === 'true'
 
     const supabase = getSupabase()
-    let query = supabase
-      .from('contacts')
-      .select('*')
-      .order('created_at', { ascending: false })
+    let data = await fetchAll(s => {
+      let q = s
+        .from('contacts')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true })
+      if (tag) {
+        q = q.contains('tags', [tag])
+      }
+      if (!includeOptedOut) {
+        q = q.eq('opted_out', false)
+      }
+      return q
+    })
 
-    if (tag) {
-      query = query.contains('tags', [tag])
-    }
-
-    if (!includeOptedOut) {
-      query = query.eq('opted_out', false)
-    }
-
-    const { data, error } = await query
-
-    if (!error && data && (excludeCampaigns || unsentOnly)) {
+    if (excludeCampaigns || unsentOnly) {
       let excludeContactIds = new Set<string>()
 
       if (excludeCampaigns) {
         const campaignIds = excludeCampaigns.split(',').filter(Boolean)
         if (campaignIds.length > 0) {
-          const { data: logs } = await supabase
-            .from('sms_logs')
-            .select('contact_id')
-            .in('campaign_id', campaignIds)
-            .not('contact_id', 'is', null)
-          logs?.forEach(l => excludeContactIds.add(l.contact_id))
+          const logs = await fetchAllByIn(
+            (s, batch) => s.from('sms_logs').select('contact_id').in('campaign_id', batch).not('contact_id', 'is', null).order('id', { ascending: true }),
+            campaignIds
+          )
+          logs.forEach(l => excludeContactIds.add(l.contact_id))
         }
       }
 
       if (unsentOnly) {
-        const { data: allLogs } = await supabase
+        const allLogs = await fetchAll(s => s
           .from('sms_logs')
           .select('contact_id')
           .not('contact_id', 'is', null)
+          .order('id', { ascending: true })
+        )
         const sentContactIds = new Set<string>()
-        allLogs?.forEach(l => sentContactIds.add(l.contact_id))
-        const filtered = data.filter(c => !sentContactIds.has(c.id))
-        data.length = 0
-        data.push(...filtered)
+        allLogs.forEach(l => sentContactIds.add(l.contact_id))
+        data = data.filter(c => !sentContactIds.has(c.id))
       }
 
       if (excludeContactIds.size > 0) {
-        const filtered = data.filter(c => !excludeContactIds.has(c.id))
-        data.length = 0
-        data.push(...filtered)
+        data = data.filter(c => !excludeContactIds.has(c.id))
       }
     }
 
-    if (error) {
-      console.error('Get contacts error:', error)
-      return NextResponse.json({ error: '顧客の取得に失敗しました' }, { status: 500 })
-    }
-
     // 配信統計を取得
-    const contactIds = data?.map(c => c.id) || []
+    const contactIds = data.map(c => c.id)
     let sendStats: Record<string, { count: number; lastSentAt: string | null }> = {}
 
     if (contactIds.length > 0) {
-      const { data: logsData } = await supabase
-        .from('sms_logs')
-        .select('contact_id, sent_at')
-        .in('contact_id', contactIds)
-        .order('sent_at', { ascending: false })
+      const logsData = await fetchAllByIn(
+        (s, batch) => s.from('sms_logs').select('contact_id, sent_at').in('contact_id', batch).order('sent_at', { ascending: false }).order('id', { ascending: true }),
+        contactIds
+      )
 
       if (logsData) {
         logsData.forEach(log => {
@@ -116,7 +107,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 顧客データに配信統計をマージ
-    const contactsWithStats = data?.map(contact => ({
+    const contactsWithStats = data.map(contact => ({
       ...contact,
       send_count: sendStats[contact.id]?.count || 0,
       last_sent_at: sendStats[contact.id]?.lastSentAt || null,
@@ -149,7 +140,7 @@ export async function POST(request: NextRequest) {
     // 重複チェックのため既存の電話番号を取得（バッチで全件取得）
     const phoneNumbers = contacts.map(c => c.phone_number).filter(Boolean) as string[]
     const existingPhones = new Set<string>()
-    const QUERY_BATCH = 500
+    const QUERY_BATCH = 100
     for (let i = 0; i < phoneNumbers.length; i += QUERY_BATCH) {
       const batch = phoneNumbers.slice(i, i + QUERY_BATCH)
       const { data: existing } = await supabase

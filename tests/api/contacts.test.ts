@@ -77,15 +77,20 @@ describe('GET /api/contacts', () => {
       createContact({ phone_number: '09012345678', name: 'Test User' }),
       createContact({ phone_number: '08012345678', name: 'Test User 2', tags: ['vip'] }),
     ]
-    setQueryResult(mockContacts)
+    // 1) fetchAll for contacts
+    enqueueQueryResult(mockContacts)
+    // 2) fetchAllByIn for sms_logs stats
+    enqueueQueryResult([])
 
     const request = createGetRequest()
     const response = await GET(request)
     const data = await response.json()
 
     expect(response.status).toBe(200)
-    expect(data.contacts).toEqual(mockContacts)
-    expect(getLastCalledTable()).toBe('contacts')
+    expect(data.contacts).toEqual(
+      mockContacts.map(c => ({ ...c, send_count: 0, last_sent_at: null }))
+    )
+    expect(getLastCalledTable()).toBe('sms_logs')
   })
 
   it('tagパラメータでフィルタリングできる', async () => {
@@ -93,15 +98,19 @@ describe('GET /api/contacts', () => {
     const mockContacts = [
       createContact({ phone_number: '09012345678', name: 'VIP User', tags: ['vip'] }),
     ]
-    setQueryResult(mockContacts)
+    // 1) fetchAll for contacts
+    enqueueQueryResult(mockContacts)
+    // 2) fetchAllByIn for sms_logs stats
+    enqueueQueryResult([])
 
     const request = createGetRequest({ tag: 'vip' })
     const response = await GET(request)
     const data = await response.json()
 
     expect(response.status).toBe(200)
-    expect(data.contacts).toEqual(mockContacts)
-    expect(getLastCalledTable()).toBe('contacts')
+    expect(data.contacts).toEqual(
+      mockContacts.map(c => ({ ...c, send_count: 0, last_sent_at: null }))
+    )
   })
 
   it('includeOptedOut=trueでオプトアウト顧客も含む', async () => {
@@ -110,15 +119,19 @@ describe('GET /api/contacts', () => {
       createContact({ phone_number: '09012345678', name: 'Active' }),
       createContact({ phone_number: '08012345678', name: 'Opted Out', opted_out: true }),
     ]
-    setQueryResult(mockContacts)
+    // 1) fetchAll for contacts
+    enqueueQueryResult(mockContacts)
+    // 2) fetchAllByIn for sms_logs stats
+    enqueueQueryResult([])
 
     const request = createGetRequest({ includeOptedOut: 'true' })
     const response = await GET(request)
     const data = await response.json()
 
     expect(response.status).toBe(200)
-    expect(data.contacts).toEqual(mockContacts)
-    expect(getLastCalledTable()).toBe('contacts')
+    expect(data.contacts).toEqual(
+      mockContacts.map(c => ({ ...c, send_count: 0, last_sent_at: null }))
+    )
   })
 
   it('デフォルトではオプトアウト顧客を除外', async () => {
@@ -126,15 +139,19 @@ describe('GET /api/contacts', () => {
     const mockContacts = [
       createContact({ phone_number: '09012345678', name: 'Active' }),
     ]
-    setQueryResult(mockContacts)
+    // 1) fetchAll for contacts
+    enqueueQueryResult(mockContacts)
+    // 2) fetchAllByIn for sms_logs stats
+    enqueueQueryResult([])
 
     const request = createGetRequest()
     const response = await GET(request)
     const data = await response.json()
 
     expect(response.status).toBe(200)
-    expect(data.contacts).toEqual(mockContacts)
-    expect(getLastCalledTable()).toBe('contacts')
+    expect(data.contacts).toEqual(
+      mockContacts.map(c => ({ ...c, send_count: 0, last_sent_at: null }))
+    )
   })
 
   it('Supabaseエラー時は500を返す', async () => {
@@ -212,6 +229,10 @@ describe('POST /api/contacts', () => {
     setAuthenticated(true)
     // 1回目: 既存の電話番号チェック (1件既存)
     enqueueQueryResult([{ phone_number: '09012345678' }])
+    // 2回目: 既存の電話番号のtags取得
+    enqueueQueryResult([{ phone_number: '09012345678', tags: [] }])
+    // 3回目: insert新規分
+    enqueueQueryResult(null, null)
 
     const request = createPostRequest({
       contacts: [
@@ -224,7 +245,8 @@ describe('POST /api/contacts', () => {
 
     expect(response.status).toBe(200)
     expect(data.added).toBe(1)
-    expect(data.duplicates).toBe(1)
+    expect(data.updated).toBe(1)
+    expect(data.duplicates).toBe(0)
     expect(data.total).toBe(2)
   })
 

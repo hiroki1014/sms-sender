@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthenticated } from '@/lib/auth'
-import { getSupabase } from '@/lib/supabase'
+import { getSupabase, fetchAll, fetchAllByIn } from '@/lib/supabase'
 import { normalizePhoneNumber, toDomesticFormat } from '@/lib/twilio'
 
 export const dynamic = 'force-dynamic'
@@ -31,46 +31,58 @@ export async function GET(
     const domestic = toDomesticFormat(contact.phone_number)
     const e164 = normalizePhoneNumber(domestic)
 
-    const { data: smsLogs } = await supabase
+    const smsLogs = await fetchAll(s => s
       .from('sms_logs')
       .select('id, message, sent_at, campaign_id, delivery_status, status')
       .or(`contact_id.eq.${id},phone_number.eq.${domestic},phone_number.eq.${e164}`)
       .order('sent_at', { ascending: false })
+      .order('id', { ascending: true })
+    )
 
-    const { data: incoming } = await supabase
+    const incoming = await fetchAll(s => s
       .from('incoming_messages')
       .select('id, body, received_at, is_opt_out')
       .or(`contact_id.eq.${id},from_number.eq.${domestic},from_number.eq.${e164}`)
       .order('received_at', { ascending: false })
+      .order('id', { ascending: true })
+    )
 
-    const campaignIds = Array.from(new Set((smsLogs || []).map(l => l.campaign_id).filter(Boolean)))
+    const campaignIds = Array.from(new Set(smsLogs.map(l => l.campaign_id).filter(Boolean)))
     let campaignMap: Record<string, string> = {}
     if (campaignIds.length > 0) {
-      const { data: campaigns } = await supabase
-        .from('campaigns')
-        .select('id, name')
-        .in('id', campaignIds)
-      campaigns?.forEach(c => { campaignMap[c.id] = c.name })
+      const campaigns = await fetchAllByIn(
+        (s, batch) => s.from('campaigns').select('id, name').in('id', batch).order('id', { ascending: true }),
+        campaignIds
+      )
+      campaigns.forEach(c => { campaignMap[c.id] = c.name })
     }
 
-    const smsLogIds = (smsLogs || []).map(l => l.id)
+    const smsLogIds = smsLogs.map(l => l.id)
     let clickEvents: Array<{ timestamp: string; original_url: string; campaign_name?: string }> = []
     if (smsLogIds.length > 0) {
-      const { data: shortUrls } = await supabase
+      const byContact = await fetchAll(s => s
         .from('short_urls')
         .select('id, original_url, campaign_id, sms_log_id')
-        .or(`contact_id.eq.${id},sms_log_id.in.(${smsLogIds.join(',')})`)
+        .eq('contact_id', id)
+        .order('id', { ascending: true })
+      )
+      const bySmsLog = await fetchAllByIn(
+        (s, batch) => s.from('short_urls').select('id, original_url, campaign_id, sms_log_id').in('sms_log_id', batch).order('id', { ascending: true }),
+        smsLogIds
+      )
+      const shortUrlMap = new Map<string, typeof byContact[0]>()
+      ;[...byContact, ...bySmsLog].forEach(s => shortUrlMap.set(s.id, s))
+      const shortUrls = Array.from(shortUrlMap.values())
 
-      if (shortUrls && shortUrls.length > 0) {
+      if (shortUrls.length > 0) {
         const shortUrlIds = shortUrls.map(s => s.id)
-        const { data: clicks } = await supabase
-          .from('click_logs')
-          .select('short_url_id, clicked_at')
-          .in('short_url_id', shortUrlIds)
-          .order('clicked_at', { ascending: false })
+        const clicks = await fetchAllByIn(
+          (s, batch) => s.from('click_logs').select('short_url_id, clicked_at').in('short_url_id', batch).order('clicked_at', { ascending: false }).order('id', { ascending: true }),
+          shortUrlIds
+        )
 
         const urlMap = new Map(shortUrls.map(s => [s.id, s]))
-        clicks?.forEach(click => {
+        clicks.forEach(click => {
           const su = urlMap.get(click.short_url_id)
           if (su) {
             clickEvents.push({
@@ -96,7 +108,7 @@ export async function GET(
 
     const timeline: TimelineEntry[] = []
 
-    for (const log of smsLogs || []) {
+    for (const log of smsLogs) {
       timeline.push({
         type: 'sent',
         timestamp: log.sent_at,
@@ -106,7 +118,7 @@ export async function GET(
       })
     }
 
-    for (const msg of incoming || []) {
+    for (const msg of incoming) {
       timeline.push({
         type: 'received',
         timestamp: msg.received_at,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabase, Campaign } from '@/lib/supabase'
+import { getSupabase, fetchAll, Campaign } from '@/lib/supabase'
 import { sendCampaign } from '@/lib/send-campaign'
 
 export const dynamic = 'force-dynamic'
@@ -30,32 +30,36 @@ export async function GET(request: NextRequest) {
   const supabase = getSupabase()
   const now = new Date().toISOString()
 
-  const { data: due, error: fetchError } = await supabase
-    .from('campaigns')
-    .select('*')
-    .in('status', ['scheduled', 'sending'])
-    .lte('scheduled_at', now)
-    .order('scheduled_at', { ascending: true })
-
-  if (fetchError) {
+  let due: Campaign[]
+  try {
+    due = await fetchAll(s => s
+      .from('campaigns')
+      .select('*')
+      .eq('status', 'scheduled')
+      .lte('scheduled_at', now)
+      .order('scheduled_at', { ascending: true })
+      .order('id', { ascending: true })
+    )
+  } catch (fetchError) {
     console.error('Fetch scheduled campaigns error:', fetchError)
     return NextResponse.json({ error: 'キャンペーン取得に失敗しました' }, { status: 500 })
   }
 
-  const campaigns = (due || []) as Campaign[]
+  const campaigns = due
   const results: CampaignResult[] = []
 
   for (const campaign of campaigns) {
     if (!campaign.id) continue
 
-    const { error: lockError } = await supabase
+    const { data: lockData, error: lockError } = await supabase
       .from('campaigns')
       .update({ status: 'sending' })
       .eq('id', campaign.id)
-      .in('status', ['scheduled', 'sending'])
+      .eq('status', 'scheduled')
+      .select('id')
 
-    if (lockError) {
-      console.error(`Lock failed for campaign ${campaign.id}:`, lockError)
+    if (lockError || !lockData || lockData.length === 0) {
+      console.error(`Lock failed for campaign ${campaign.id}:`, lockError || 'already locked')
       continue
     }
 

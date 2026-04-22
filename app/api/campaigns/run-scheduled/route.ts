@@ -27,21 +27,22 @@ export async function POST(request: NextRequest) {
       .from('campaigns')
       .select('*')
       .eq('id', id)
-      .in('status', ['scheduled', 'sending'])
+      .eq('status', 'scheduled')
       .single()
 
     if (fetchError || !campaign) {
-      return NextResponse.json({ error: '実行可能なキャンペーンが見つかりません' }, { status: 404 })
+      return NextResponse.json({ error: '予約中のキャンペーンが見つかりません' }, { status: 404 })
     }
 
-    const { error: lockError } = await supabase
+    const { data: lockData, error: lockError } = await supabase
       .from('campaigns')
       .update({ status: 'sending' })
       .eq('id', id)
-      .in('status', ['scheduled', 'sending'])
+      .eq('status', 'scheduled')
+      .select('id')
 
-    if (lockError) {
-      return NextResponse.json({ error: 'ステータス更新に失敗しました' }, { status: 500 })
+    if (lockError || !lockData || lockData.length === 0) {
+      return NextResponse.json({ error: '別のプロセスが実行中です' }, { status: 409 })
     }
 
     const recipients = (campaign as Campaign).recipients_snapshot || []

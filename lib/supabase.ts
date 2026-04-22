@@ -18,6 +18,42 @@ export function getSupabase(): SupabaseClient {
   return supabaseClient
 }
 
+const PAGE_SIZE = 1000
+const IN_BATCH_SIZE = 100
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function fetchAll<T = any>(
+  buildQuery: (supabase: SupabaseClient) => any
+): Promise<T[]> {
+  const supabase = getSupabase()
+  const allData: T[] = []
+  let offset = 0
+  while (true) {
+    const { data, error } = await buildQuery(supabase).range(offset, offset + PAGE_SIZE - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    allData.push(...data)
+    if (data.length < PAGE_SIZE) break
+    offset += PAGE_SIZE
+  }
+  return allData
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function fetchAllByIn<T = any>(
+  buildQuery: (supabase: SupabaseClient, batch: string[]) => any,
+  ids: string[]
+): Promise<T[]> {
+  if (ids.length === 0) return []
+  const allData: T[] = []
+  for (let i = 0; i < ids.length; i += IN_BATCH_SIZE) {
+    const batch = ids.slice(i, i + IN_BATCH_SIZE)
+    const results = await fetchAll<T>(s => buildQuery(s, batch))
+    allData.push(...results)
+  }
+  return allData
+}
+
 // Twilio Status Callback で通知される MessageStatus
 // https://www.twilio.com/docs/messaging/guides/webhook-request
 export type TwilioDeliveryStatus =

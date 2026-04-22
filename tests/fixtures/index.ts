@@ -21,6 +21,12 @@ export function createContact(overrides?: Partial<Contact>): Contact {
     opted_out_at: null,
     created_at: now,
     updated_at: now,
+    url: null,
+    gender: null,
+    list_type: null,
+    call_result: null,
+    prefecture: null,
+    notes: null,
     ...overrides,
   }
 }

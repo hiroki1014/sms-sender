@@ -41,6 +41,9 @@ export const createQueryBuilder = () => {
     gt: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
+    range: vi.fn().mockReturnThis(),
+    not: vi.fn().mockReturnThis(),
+    or: vi.fn().mockReturnThis(),
     single: vi.fn().mockReturnThis(),
     // Promise-like behavior
     then: vi.fn((resolve) => resolve(getResult())),
@@ -106,4 +109,14 @@ vi.mock('@/lib/supabase', () => ({
   getSupabase: () => mockSupabaseClient,
   saveSmsLog: (...args: any[]) => mockSaveSmsLog(...args),
   getSmsLogs: (...args: any[]) => mockGetSmsLogs(...args),
+  fetchAll: vi.fn(async (buildQuery: any) => {
+    const { data, error } = await buildQuery(mockSupabaseClient)
+    if (error) throw error
+    return data || []
+  }),
+  fetchAllByIn: vi.fn(async (buildQuery: any, ids: string[]) => {
+    const { data, error } = await buildQuery(mockSupabaseClient, ids)
+    if (error) throw error
+    return data || []
+  }),
 }))
