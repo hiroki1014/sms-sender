@@ -500,8 +500,8 @@ async function getCampaignDetailStats(
     }
   })
 
-  const clickCount = clickLogs.filter(c => humanLikeClickIdSet.has(c.id)).length
-  const uniqueClickCount = clicksByShortUrl.size
+  const clickCount = Array.from(clicksPerSmsLog.values()).reduce((sum, d) => sum + d.count, 0)
+  const uniqueClickCount = clicksPerSmsLog.size
 
   // --- Charts ---
 
@@ -584,8 +584,14 @@ async function getCampaignDetailStats(
   const suspectedAutomated = classified.filter(c => c.classification === 'suspected_automated').length
   const unknownCount = classified.filter(c => c.classification === 'unknown').length
 
-  const uniqueByClassification = (cls: string) =>
-    new Set(classified.filter(c => c.classification === cls).map(c => c.short_url_id)).size
+  const uniqueByClassification = (cls: string) => {
+    const smsLogIds = new Set<string>()
+    classified.filter(c => c.classification === cls).forEach(c => {
+      const smsLogId = shortUrlToSmsLogId.get(c.short_url_id)
+      if (smsLogId) smsLogIds.add(smsLogId)
+    })
+    return smsLogIds.size
+  }
   const humanLikeUnique = uniqueByClassification('human_like')
   const suspectedAutomatedUnique = uniqueByClassification('suspected_automated')
   const unknownUnique = uniqueByClassification('unknown')
