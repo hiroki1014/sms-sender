@@ -149,6 +149,20 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
     if (su.sms_log_id) overallShortUrlToSmsLogId.set(su.id, su.sms_log_id)
   })
 
+  // 全clickLogsを一括分類（ヒートマップ・CPC・リピーターで使用）
+  const allClicksCtx: ClickWithContext[] = clickLogs.map(click => {
+    const smsLogId = overallShortUrlToSmsLogId.get(click.short_url_id)
+    const sentAt = smsLogId ? overallSmsLogSentAt.get(smsLogId) ?? null : null
+    return {
+      id: click.id, short_url_id: click.short_url_id, clicked_at: click.clicked_at,
+      user_agent: click.user_agent ?? null, ip_address: click.ip_address ?? null,
+      sec_fetch_mode: click.sec_fetch_mode ?? null, sec_fetch_dest: click.sec_fetch_dest ?? null,
+      sent_at: sentAt,
+    }
+  })
+  const allClassified = classifyClicks(allClicksCtx)
+  const humanLikeClickIdSet = new Set(allClassified.filter(c => c.classification === 'human_like').map(c => c.id))
+
   // キャンペーンごとの統計を計算
   const campaignStats: CampaignStats[] = campaigns.map(campaign => {
     const campaignLogs = smsLogs.filter(l => l.campaign_id === campaign.id && l.status !== 'pending')
@@ -219,9 +233,10 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
 
   // --- Charts ---
 
-  // ヒートマップ: clicked_at を JST に変換し曜日×時間帯で集計
+  // ヒートマップ: clicked_at を JST に変換し曜日×時間帯で集計（human_likeのみ）
   const heatmapMap = new Map<string, number>()
   clickLogs.forEach(click => {
+    if (!humanLikeClickIdSet.has(click.id)) return
     const d = new Date(click.clicked_at)
     // UTC→JST (+9h)
     const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000)
@@ -249,16 +264,16 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
   const totalCost = smsLogs.filter(l => l.status !== 'pending').reduce((sum, l) => sum + (Number(l.price) || 0), 0)
   const cpc = {
     total_cost: totalCost,
-    total_clicks: totalUniqueClicks,
-    cpc: totalUniqueClicks > 0 ? Math.round((totalCost / totalUniqueClicks) * 100) / 100 : 0,
+    total_clicks: totalHumanLikeUnique,
+    cpc: totalHumanLikeUnique > 0 ? Math.round((totalCost / totalHumanLikeUnique) * 100) / 100 : 0,
   }
 
-  // リピーター: contact_id ごとにクリックされたキャンペーンの Set を作る
+  // リピーター: contact_id ごとにクリックされたキャンペーンの Set を作る（human_likeのみ）
   const contactCampaignMap = new Map<string, Set<string>>()
   shortUrls.forEach(su => {
     if (!su.contact_id) return
-    const suClicks = clickLogs.filter(c => c.short_url_id === su.id)
-    if (suClicks.length === 0) return
+    const hasHumanClick = clickLogs.some(c => c.short_url_id === su.id && humanLikeClickIdSet.has(c.id))
+    if (!hasHumanClick) return
     if (!contactCampaignMap.has(su.contact_id)) {
       contactCampaignMap.set(su.contact_id, new Set())
     }
@@ -384,6 +399,28 @@ async function getCampaignDetailStats(
       )
     : []
 
+  // クリック分類（human_like判定）— 受信者集計・チャートで使い回す
+  const smsLogSentAt = new Map<string, string>()
+  smsLogs.forEach(log => {
+    if (log.sent_at) smsLogSentAt.set(log.id, log.sent_at)
+  })
+  const shortUrlToSmsLogId = new Map<string, string>()
+  shortUrls.forEach(su => {
+    if (su.sms_log_id) shortUrlToSmsLogId.set(su.id, su.sms_log_id)
+  })
+  const clicksWithContext: ClickWithContext[] = clickLogs.map(click => {
+    const smsLogId = shortUrlToSmsLogId.get(click.short_url_id)
+    const sentAt = smsLogId ? smsLogSentAt.get(smsLogId) ?? null : null
+    return {
+      id: click.id, short_url_id: click.short_url_id, clicked_at: click.clicked_at,
+      user_agent: click.user_agent ?? null, ip_address: click.ip_address ?? null,
+      sec_fetch_site: click.sec_fetch_site ?? null, sec_fetch_mode: click.sec_fetch_mode ?? null,
+      sec_fetch_dest: click.sec_fetch_dest ?? null, sent_at: sentAt,
+    }
+  })
+  const classified = classifyClicks(clicksWithContext)
+  const humanLikeClickIdSet = new Set(classified.filter(c => c.classification === 'human_like').map(c => c.id))
+
   // 顧客情報を取得（contact_id + phone_number の両方で引く）
   const contactIds = Array.from(new Set(shortUrls.map(s => s.contact_id).filter(Boolean)))
   const phoneNumbers = Array.from(new Set(smsLogs.map(l => l.phone_number).filter(Boolean)))
@@ -406,9 +443,10 @@ async function getCampaignDetailStats(
     }
   }
 
-  // 顧客ごとのクリック統計
+  // 顧客ごとのクリック統計（human_likeのみ）
   const clicksByShortUrl = new Map<string, { count: number; first: string; last: string }>()
   clickLogs.forEach(click => {
+    if (!humanLikeClickIdSet.has(click.id)) return
     const existing = clicksByShortUrl.get(click.short_url_id)
     if (existing) {
       existing.count++
@@ -462,7 +500,7 @@ async function getCampaignDetailStats(
     }
   })
 
-  const clickCount = clickLogs.length
+  const clickCount = clickLogs.filter(c => humanLikeClickIdSet.has(c.id)).length
   const uniqueClickCount = clicksByShortUrl.size
 
   // --- Charts ---
@@ -481,18 +519,12 @@ async function getCampaignDetailStats(
   ]
   const bucketCounts = new Map<string, number>(TIME_BUCKETS.map(b => [b.label, 0]))
 
-  // sms_log_id → sent_at のマップ
-  const smsLogSentAt = new Map<string, string>()
-  smsLogs.forEach(log => {
-    if (log.sent_at) smsLogSentAt.set(log.id, log.sent_at)
-  })
-
-  // short_url.sms_log_id 経由で click_logs と sms_logs を結合
+  // short_url.sms_log_id 経由で click_logs と sms_logs を結合（human_likeのみ）
   shortUrls.forEach(su => {
     if (!su.sms_log_id) return
     const sentAt = smsLogSentAt.get(su.sms_log_id)
     if (!sentAt) return
-    const suClicks = clickLogs.filter(c => c.short_url_id === su.id)
+    const suClicks = clickLogs.filter(c => c.short_url_id === su.id && humanLikeClickIdSet.has(c.id))
     suClicks.forEach(click => {
       const diffMinutes = (new Date(click.clicked_at).getTime() - new Date(sentAt).getTime()) / (1000 * 60)
       const bucket = TIME_BUCKETS.find(b => diffMinutes < b.max) || TIME_BUCKETS[TIME_BUCKETS.length - 1]
@@ -518,7 +550,7 @@ async function getCampaignDetailStats(
   const clickedContactIds = new Set<string>()
   shortUrls.forEach(su => {
     if (!su.contact_id) return
-    const hasClick = clickLogs.some(c => c.short_url_id === su.id)
+    const hasClick = clickLogs.some(c => c.short_url_id === su.id && humanLikeClickIdSet.has(c.id))
     if (hasClick) clickedContactIds.add(su.contact_id)
   })
 
@@ -547,29 +579,7 @@ async function getCampaignDetailStats(
     }
   })
 
-  // click_diagnostics: クリックの自動アクセス推定
-  const shortUrlToSmsLogId = new Map<string, string>()
-  shortUrls.forEach(su => {
-    if (su.sms_log_id) shortUrlToSmsLogId.set(su.id, su.sms_log_id)
-  })
-
-  const clicksWithContext: ClickWithContext[] = clickLogs.map(click => {
-    const smsLogId = shortUrlToSmsLogId.get(click.short_url_id)
-    const sentAt = smsLogId ? smsLogSentAt.get(smsLogId) ?? null : null
-    return {
-      id: click.id,
-      short_url_id: click.short_url_id,
-      clicked_at: click.clicked_at,
-      user_agent: click.user_agent ?? null,
-      ip_address: click.ip_address ?? null,
-      sec_fetch_site: click.sec_fetch_site ?? null,
-      sec_fetch_mode: click.sec_fetch_mode ?? null,
-      sec_fetch_dest: click.sec_fetch_dest ?? null,
-      sent_at: sentAt,
-    }
-  })
-
-  const classified = classifyClicks(clicksWithContext)
+  // click_diagnostics: 分類結果の集計
   const humanLike = classified.filter(c => c.classification === 'human_like').length
   const suspectedAutomated = classified.filter(c => c.classification === 'suspected_automated').length
   const unknownCount = classified.filter(c => c.classification === 'unknown').length

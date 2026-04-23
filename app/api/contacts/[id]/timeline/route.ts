@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { isAuthenticated } from '@/lib/auth'
 import { getSupabase, fetchAll, fetchAllByIn } from '@/lib/supabase'
 import { normalizePhoneNumber, toDomesticFormat } from '@/lib/twilio'
+import { classifyClicks, ClickWithContext } from '@/lib/click-diagnostics'
 
 export const dynamic = 'force-dynamic'
 
@@ -77,12 +78,34 @@ export async function GET(
       if (shortUrls.length > 0) {
         const shortUrlIds = shortUrls.map(s => s.id)
         const clicks = await fetchAllByIn(
-          (s, batch) => s.from('click_logs').select('short_url_id, clicked_at').in('short_url_id', batch).order('clicked_at', { ascending: false }).order('id', { ascending: true }),
+          (s, batch) => s.from('click_logs').select('id, short_url_id, clicked_at, user_agent, ip_address, sec_fetch_mode, sec_fetch_dest').in('short_url_id', batch).order('clicked_at', { ascending: false }).order('id', { ascending: true }),
           shortUrlIds
         )
 
+        const smsLogSentAtMap = new Map<string, string>()
+        smsLogs.forEach(log => {
+          if (log.sent_at) smsLogSentAtMap.set(log.id, log.sent_at)
+        })
+        const suToSmsLogId = new Map<string, string>()
+        shortUrls.forEach(su => {
+          if (su.sms_log_id) suToSmsLogId.set(su.id, su.sms_log_id)
+        })
+        const clicksCtx: ClickWithContext[] = clicks.map(click => {
+          const smsLogId = suToSmsLogId.get(click.short_url_id)
+          const sentAt = smsLogId ? smsLogSentAtMap.get(smsLogId) ?? null : null
+          return {
+            id: click.id, short_url_id: click.short_url_id, clicked_at: click.clicked_at,
+            user_agent: click.user_agent ?? null, ip_address: click.ip_address ?? null,
+            sec_fetch_mode: click.sec_fetch_mode ?? null, sec_fetch_dest: click.sec_fetch_dest ?? null,
+            sent_at: sentAt,
+          }
+        })
+        const classifiedClicks = classifyClicks(clicksCtx)
+        const humanClickIds = new Set(classifiedClicks.filter(c => c.classification === 'human_like').map(c => c.id))
+
         const urlMap = new Map(shortUrls.map(s => [s.id, s]))
         clicks.forEach(click => {
+          if (!humanClickIds.has(click.id)) return
           const su = urlMap.get(click.short_url_id)
           if (su) {
             clickEvents.push({
