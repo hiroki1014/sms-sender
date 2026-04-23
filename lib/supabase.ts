@@ -116,6 +116,9 @@ export interface ClickLog {
   clicked_at?: string
   user_agent?: string | null
   ip_address?: string | null
+  sec_fetch_site?: string | null
+  sec_fetch_mode?: string | null
+  sec_fetch_dest?: string | null
 }
 
 export interface IncomingMessage {

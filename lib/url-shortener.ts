@@ -134,6 +134,9 @@ export async function recordClick(params: {
   shortUrlId: string
   userAgent?: string | null
   ipAddress?: string | null
+  secFetchSite?: string | null
+  secFetchMode?: string | null
+  secFetchDest?: string | null
 }): Promise<void> {
   const supabase = getSupabase()
 
@@ -143,6 +146,9 @@ export async function recordClick(params: {
       short_url_id: params.shortUrlId,
       user_agent: params.userAgent || null,
       ip_address: params.ipAddress || null,
+      sec_fetch_site: params.secFetchSite || null,
+      sec_fetch_mode: params.secFetchMode || null,
+      sec_fetch_dest: params.secFetchDest || null,
     }])
 
   if (error) {

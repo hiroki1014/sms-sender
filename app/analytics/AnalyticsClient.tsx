@@ -33,6 +33,8 @@ interface CampaignStats {
   click_count: number
   unique_click_count: number
   click_rate: number
+  human_like_click_count?: number
+  human_like_unique_count?: number
 }
 
 interface OverallStats {
@@ -45,6 +47,7 @@ interface OverallStats {
   total_pending: number
   overall_delivery_rate: number
   total_clicks: number
+  total_clicks_unique: number
   overall_click_rate: number
 }
 
@@ -175,8 +178,9 @@ export default function AnalyticsClient() {
             />
             <StatCard
               icon={<CursorClick className="w-5 h-5" />}
-              label="クリック数"
-              value={data.overall.total_clicks.toLocaleString()}
+              label="クリック"
+              value={`${data.overall.total_clicks_unique}人`}
+              subValue={`${data.overall.total_clicks}クリック`}
               color="text-warning"
             />
             <StatCard
@@ -286,12 +290,14 @@ export default function AnalyticsClient() {
                         </span>
                       </Td>
                       <Td className="text-right font-mono text-sm">
-                        {campaign.click_count.toLocaleString()}
-                        {campaign.unique_click_count !== campaign.click_count && (
-                          <span className="text-xs text-gray-400 ml-1">
-                            ({campaign.unique_click_count}人)
-                          </span>
-                        )}
+                        {campaign.human_like_unique_count != null
+                          ? <>{campaign.human_like_unique_count}人
+                              <span className="text-xs text-gray-400 ml-1">({campaign.human_like_click_count}クリック)</span>
+                            </>
+                          : <>{campaign.unique_click_count}人
+                              <span className="text-xs text-gray-400 ml-1">({campaign.click_count}クリック)</span>
+                            </>
+                        }
                       </Td>
                       <Td className="text-right">
                         <span className={`font-mono text-sm font-medium ${

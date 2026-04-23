@@ -38,6 +38,17 @@ interface CampaignStats {
   click_rate: number
 }
 
+interface ClickDiagnostics {
+  total: number
+  human_like: number
+  human_like_unique: number
+  suspected_automated: number
+  suspected_automated_unique: number
+  unknown: number
+  unknown_unique: number
+  top_reason_sets: Array<{ reasons: string[]; count: number }>
+}
+
 interface DetailData {
   campaign: CampaignStats
   recipients: Recipient[]
@@ -45,10 +56,21 @@ interface DetailData {
     timeToClick: Array<{ bucket: string; count: number }>
     tagBreakdown: Array<{ tag: string; sent: number; clicked: number; rate: number }>
   }
+  click_diagnostics?: ClickDiagnostics
 }
 
 const DELIVERED = new Set(['delivered', 'read', 'sent'])
 const UNDELIVERED = new Set(['undelivered', 'failed', 'canceled'])
+
+const REASON_LABELS: Record<string, string> = {
+  scanner_ip: 'スキャナーIP',
+  quick_click: '送信直後',
+  multi_url_same_ip: '同一IP複数URL',
+  duplicate_access: '短時間重複',
+  mobile_ua: 'モバイルUA',
+  delayed_click: '時間経過',
+  browser_headers: 'ブラウザヘッダ',
+}
 
 function deliveryBadge(status: string | null) {
   if (!status) return <span className="text-xs text-gray-400">—</span>
@@ -143,9 +165,63 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <StatCard icon={<PaperPlaneTilt className="w-5 h-5" />} label="送信数" value={data.campaign.total_sent} subValue={`成功 ${data.campaign.success_count} / 失敗 ${data.campaign.failed_count}`} color="text-accent-500" />
             <StatCard icon={<Envelope className="w-5 h-5" />} label="到達率" value={`${data.campaign.delivery_rate}%`} subValue={`配信済 ${data.campaign.delivered_count} / 未確定 ${data.campaign.pending_count} / 不達 ${data.campaign.undelivered_count}`} color="text-success" />
-            <StatCard icon={<CursorClick className="w-5 h-5" />} label="クリック数" value={`${data.campaign.click_count} (${data.campaign.unique_click_count}人)`} color="text-warning" />
+            <StatCard
+              icon={<CursorClick className="w-5 h-5" />}
+              label="クリック"
+              value={data.click_diagnostics ? `${data.click_diagnostics.human_like_unique}人` : `${data.campaign.unique_click_count}人`}
+              subValue={data.click_diagnostics ? `${data.click_diagnostics.human_like}クリック` : `${data.campaign.click_count}クリック`}
+              color="text-warning"
+            />
             <StatCard icon={<Clock className="w-5 h-5" />} label="クリック率" value={`${data.campaign.click_rate}%`} color="text-accent-600" />
           </div>
+
+          {/* Click Diagnostics (collapsible) */}
+          {data.click_diagnostics && data.click_diagnostics.total > 0 && (
+            <details className="mb-6">
+              <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600">
+                アクセス分類の詳細（推定）
+              </summary>
+              <Card className="p-4 mt-2">
+                <div className="flex gap-6 mb-3">
+                  <div>
+                    <span className="text-xs text-gray-500">人間っぽい</span>
+                    <div className="text-base font-semibold text-success">
+                      {data.click_diagnostics.human_like_unique}人
+                      <span className="text-sm font-normal text-gray-400 ml-1">({data.click_diagnostics.human_like}件)</span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500">自動アクセス疑い</span>
+                    <div className="text-base font-semibold text-error">
+                      {data.click_diagnostics.suspected_automated_unique}人
+                      <span className="text-sm font-normal text-gray-400 ml-1">({data.click_diagnostics.suspected_automated}件)</span>
+                    </div>
+                  </div>
+                  {data.click_diagnostics.unknown > 0 && (
+                    <div>
+                      <span className="text-xs text-gray-500">不明</span>
+                      <div className="text-base font-semibold text-gray-400">
+                        {data.click_diagnostics.unknown_unique}人
+                        <span className="text-sm font-normal text-gray-400 ml-1">({data.click_diagnostics.unknown}件)</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {data.click_diagnostics.top_reason_sets.length > 0 && (
+                  <div className="text-xs text-gray-500">
+                    <span className="font-medium">検出理由: </span>
+                    {data.click_diagnostics.top_reason_sets.map((set, i) => (
+                      <span key={i}>
+                        {i > 0 && '、'}
+                        {set.reasons.map(r => REASON_LABELS[r] || r).join('・')}
+                        <span className="text-gray-400"> ({set.count}件)</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            </details>
+          )}
 
           {/* Charts */}
           {data.charts && (

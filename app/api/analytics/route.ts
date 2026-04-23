@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthenticated } from '@/lib/auth'
 import { getSupabase, fetchAll, fetchAllByIn } from '@/lib/supabase'
+import { classifyClicks, ClickWithContext } from '@/lib/click-diagnostics'
 
 interface CampaignStats {
   campaign_id: string
@@ -16,6 +17,8 @@ interface CampaignStats {
   click_count: number
   unique_click_count: number
   click_rate: number
+  human_like_click_count?: number
+  human_like_unique_count?: number
 }
 
 interface OverallStats {
@@ -28,6 +31,7 @@ interface OverallStats {
   total_pending: number
   overall_delivery_rate: number
   total_clicks: number
+  total_clicks_unique: number
   overall_click_rate: number
 }
 
@@ -99,6 +103,7 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
         total_pending: 0,
         overall_delivery_rate: 0,
         total_clicks: 0,
+        total_clicks_unique: 0,
         overall_click_rate: 0,
       },
       campaigns: [],
@@ -115,13 +120,13 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
 
   // SMS送信統計を取得
   const smsLogs = await fetchAllByIn(
-    (s, batch) => s.from('sms_logs').select('campaign_id, status, delivery_status, price').in('campaign_id', batch).order('id', { ascending: true }),
+    (s, batch) => s.from('sms_logs').select('id, campaign_id, status, delivery_status, price, sent_at').in('campaign_id', batch).order('id', { ascending: true }),
     campaignIds
   )
 
   // クリック統計を取得（short_urlsとclick_logsをJOIN）
   const shortUrls = await fetchAllByIn(
-    (s, batch) => s.from('short_urls').select('id, campaign_id, contact_id').in('campaign_id', batch).order('id', { ascending: true }),
+    (s, batch) => s.from('short_urls').select('id, campaign_id, contact_id, sms_log_id').in('campaign_id', batch).order('id', { ascending: true }),
     campaignIds
   )
 
@@ -129,10 +134,20 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
 
   const clickLogs = shortUrlIds.length > 0
     ? await fetchAllByIn(
-        (s, batch) => s.from('click_logs').select('short_url_id, clicked_at').in('short_url_id', batch).order('id', { ascending: true }),
+        (s, batch) => s.from('click_logs').select('id, short_url_id, clicked_at, user_agent, ip_address, sec_fetch_mode, sec_fetch_dest').in('short_url_id', batch).order('id', { ascending: true }),
         shortUrlIds
       )
     : []
+
+  // click_diagnostics用: sent_atマッピング
+  const overallSmsLogSentAt = new Map<string, string>()
+  smsLogs.forEach(log => {
+    if (log.sent_at) overallSmsLogSentAt.set(log.id, log.sent_at)
+  })
+  const overallShortUrlToSmsLogId = new Map<string, string>()
+  shortUrls.forEach(su => {
+    if (su.sms_log_id) overallShortUrlToSmsLogId.set(su.id, su.sms_log_id)
+  })
 
   // キャンペーンごとの統計を計算
   const campaignStats: CampaignStats[] = campaigns.map(campaign => {
@@ -156,6 +171,21 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
     const clickCount = campaignClicks.length
     const uniqueClickCount = new Set(campaignClicks.map(c => c.short_url_id)).size
 
+    // click_diagnostics
+    const clicksCtx: ClickWithContext[] = campaignClicks.map(click => {
+      const smsLogId = overallShortUrlToSmsLogId.get(click.short_url_id)
+      const sentAt = smsLogId ? overallSmsLogSentAt.get(smsLogId) ?? null : null
+      return {
+        id: click.id, short_url_id: click.short_url_id, clicked_at: click.clicked_at,
+        user_agent: click.user_agent ?? null, ip_address: click.ip_address ?? null,
+        sec_fetch_mode: click.sec_fetch_mode ?? null, sec_fetch_dest: click.sec_fetch_dest ?? null,
+        sent_at: sentAt,
+      }
+    })
+    const classified = classifyClicks(clicksCtx)
+    const humanLikeCount = classified.filter(c => c.classification === 'human_like').length
+    const humanLikeUniqueCount = new Set(classified.filter(c => c.classification === 'human_like').map(c => c.short_url_id)).size
+
     return {
       campaign_id: campaign.id,
       campaign_name: campaign.name,
@@ -169,7 +199,9 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
       delivery_rate: successCount > 0 ? Math.round((deliveredCount / successCount) * 100) : 0,
       click_count: clickCount,
       unique_click_count: uniqueClickCount,
-      click_rate: successCount > 0 ? Math.round((uniqueClickCount / successCount) * 100) : 0,
+      click_rate: successCount > 0 ? Math.round((humanLikeUniqueCount / successCount) * 100) : 0,
+      human_like_click_count: humanLikeCount,
+      human_like_unique_count: humanLikeUniqueCount,
     }
   })
 
@@ -182,6 +214,8 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
   const totalPending = campaignStats.reduce((sum, c) => sum + c.pending_count, 0)
   const totalClicks = campaignStats.reduce((sum, c) => sum + c.click_count, 0)
   const totalUniqueClicks = campaignStats.reduce((sum, c) => sum + c.unique_click_count, 0)
+  const totalHumanLikeClicks = campaignStats.reduce((sum, c) => sum + (c.human_like_click_count || 0), 0)
+  const totalHumanLikeUnique = campaignStats.reduce((sum, c) => sum + (c.human_like_unique_count || 0), 0)
 
   // --- Charts ---
 
@@ -257,8 +291,9 @@ async function getOverallStats(supabase: ReturnType<typeof getSupabase>): Promis
       total_undelivered: totalUndelivered,
       total_pending: totalPending,
       overall_delivery_rate: totalSuccess > 0 ? Math.round((totalDelivered / totalSuccess) * 100) : 0,
-      total_clicks: totalClicks,
-      overall_click_rate: totalSuccess > 0 ? Math.round((totalUniqueClicks / totalSuccess) * 100) : 0,
+      total_clicks: totalHumanLikeClicks,
+      total_clicks_unique: totalHumanLikeUnique,
+      overall_click_rate: totalSuccess > 0 ? Math.round((totalHumanLikeUnique / totalSuccess) * 100) : 0,
     },
     campaigns: campaignStats,
     charts: {
@@ -290,6 +325,16 @@ async function getCampaignDetailStats(
   campaign: CampaignStats
   recipients: RecipientDetail[]
   charts: DetailCharts
+  click_diagnostics: {
+    total: number
+    human_like: number
+    human_like_unique: number
+    suspected_automated: number
+    suspected_automated_unique: number
+    unknown: number
+    unknown_unique: number
+    top_reason_sets: Array<{ reasons: string[]; count: number }>
+  }
 }> {
   // キャンペーン情報
   const { data: campaign, error: campaignError } = await supabase
@@ -334,7 +379,7 @@ async function getCampaignDetailStats(
   // クリックログ
   const clickLogs = shortUrlIds.length > 0
     ? await fetchAllByIn(
-        (s, batch) => s.from('click_logs').select('short_url_id, clicked_at').in('short_url_id', batch).order('clicked_at', { ascending: true }).order('id', { ascending: true }),
+        (s, batch) => s.from('click_logs').select('id, short_url_id, clicked_at, user_agent, ip_address, sec_fetch_site, sec_fetch_mode, sec_fetch_dest').in('short_url_id', batch).order('clicked_at', { ascending: true }).order('id', { ascending: true }),
         shortUrlIds
       )
     : []
@@ -502,6 +547,50 @@ async function getCampaignDetailStats(
     }
   })
 
+  // click_diagnostics: クリックの自動アクセス推定
+  const shortUrlToSmsLogId = new Map<string, string>()
+  shortUrls.forEach(su => {
+    if (su.sms_log_id) shortUrlToSmsLogId.set(su.id, su.sms_log_id)
+  })
+
+  const clicksWithContext: ClickWithContext[] = clickLogs.map(click => {
+    const smsLogId = shortUrlToSmsLogId.get(click.short_url_id)
+    const sentAt = smsLogId ? smsLogSentAt.get(smsLogId) ?? null : null
+    return {
+      id: click.id,
+      short_url_id: click.short_url_id,
+      clicked_at: click.clicked_at,
+      user_agent: click.user_agent ?? null,
+      ip_address: click.ip_address ?? null,
+      sec_fetch_site: click.sec_fetch_site ?? null,
+      sec_fetch_mode: click.sec_fetch_mode ?? null,
+      sec_fetch_dest: click.sec_fetch_dest ?? null,
+      sent_at: sentAt,
+    }
+  })
+
+  const classified = classifyClicks(clicksWithContext)
+  const humanLike = classified.filter(c => c.classification === 'human_like').length
+  const suspectedAutomated = classified.filter(c => c.classification === 'suspected_automated').length
+  const unknownCount = classified.filter(c => c.classification === 'unknown').length
+
+  const uniqueByClassification = (cls: string) =>
+    new Set(classified.filter(c => c.classification === cls).map(c => c.short_url_id)).size
+  const humanLikeUnique = uniqueByClassification('human_like')
+  const suspectedAutomatedUnique = uniqueByClassification('suspected_automated')
+  const unknownUnique = uniqueByClassification('unknown')
+
+  const reasonSetCounts = new Map<string, number>()
+  classified.forEach(c => {
+    if (c.reasons.length === 0) return
+    const key = JSON.stringify(c.reasons)
+    reasonSetCounts.set(key, (reasonSetCounts.get(key) || 0) + 1)
+  })
+  const topReasonSets = Array.from(reasonSetCounts.entries())
+    .map(([key, count]) => ({ reasons: JSON.parse(key) as string[], count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5)
+
   return {
     campaign: {
       campaign_id: campaign.id,
@@ -516,12 +605,22 @@ async function getCampaignDetailStats(
       delivery_rate: successCount > 0 ? Math.round((deliveredCount / successCount) * 100) : 0,
       click_count: clickCount,
       unique_click_count: uniqueClickCount,
-      click_rate: successCount > 0 ? Math.round((uniqueClickCount / successCount) * 100) : 0,
+      click_rate: successCount > 0 ? Math.round((humanLikeUnique / successCount) * 100) : 0,
     },
     recipients,
     charts: {
       timeToClick,
       tagBreakdown,
+    },
+    click_diagnostics: {
+      total: clickLogs.length,
+      human_like: humanLike,
+      human_like_unique: humanLikeUnique,
+      suspected_automated: suspectedAutomated,
+      suspected_automated_unique: suspectedAutomatedUnique,
+      unknown: unknownCount,
+      unknown_unique: unknownUnique,
+      top_reason_sets: topReasonSets,
     },
   }
 }

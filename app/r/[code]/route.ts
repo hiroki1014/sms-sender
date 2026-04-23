@@ -31,12 +31,18 @@ export async function GET(
     const userAgent = request.headers.get('user-agent')
     const forwardedFor = request.headers.get('x-forwarded-for')
     const ipAddress = forwardedFor?.split(',')[0]?.trim() || null
+    const secFetchSite = request.headers.get('sec-fetch-site')
+    const secFetchMode = request.headers.get('sec-fetch-mode')
+    const secFetchDest = request.headers.get('sec-fetch-dest')
 
     waitUntil(
       recordClick({
         shortUrlId: shortUrl.id!,
         userAgent,
         ipAddress,
+        secFetchSite,
+        secFetchMode,
+        secFetchDest,
       }).catch((clickError) => {
         console.error('Failed to record click:', clickError)
       })
