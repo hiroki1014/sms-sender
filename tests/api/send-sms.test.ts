@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 // モックのインポート（vi.mock() は名前付きインポート時に実行される）
@@ -28,10 +28,18 @@ function createRequest(body: any): NextRequest {
 }
 
 describe('POST /api/send-sms', () => {
+  const origConcurrency = process.env.SMS_CONCURRENCY
+
   beforeEach(() => {
     resetAuthMock()
     resetSupabaseMock()
     mockSendSms.mockReset()
+    process.env.SMS_CONCURRENCY = '1'
+  })
+
+  afterEach(() => {
+    if (origConcurrency === undefined) delete process.env.SMS_CONCURRENCY
+    else process.env.SMS_CONCURRENCY = origConcurrency
   })
 
   describe('認証チェック', () => {

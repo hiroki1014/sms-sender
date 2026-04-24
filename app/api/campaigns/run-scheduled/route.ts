@@ -52,13 +52,32 @@ export async function POST(request: NextRequest) {
         .from('campaigns')
         .update({ status: 'sent', sent_at: new Date().toISOString(), last_error: '送信先が空のため送信しませんでした' })
         .eq('id', id)
-      return NextResponse.json({ total: 0, success: 0, failed: 0, status: 'sent' })
+      return NextResponse.json({ total: 0, success: 0, failed: 0, skipped: 0, status: 'sent' })
     }
 
-    const summary = await sendCampaign({ recipients, campaignId: id })
+    const deadlineMs = Date.now() + 270_000
+    const summary = await sendCampaign({ recipients, campaignId: id, deadlineMs })
 
-    const allFailed = summary.total > 0 && summary.success === 0
-    const firstError = summary.results.find((r) => !r.success)?.error
+    if (summary.isPartial) {
+      await supabase
+        .from('campaigns')
+        .update({
+          last_error: `送信中: ${summary.success}件成功, ${summary.failed}件失敗, 残り${recipients.length - summary.total}件`,
+        })
+        .eq('id', id)
+
+      return NextResponse.json({
+        total: summary.total,
+        success: summary.success,
+        failed: summary.failed,
+        skipped: summary.skipped,
+        status: 'sending',
+        isPartial: true,
+      })
+    }
+
+    const allFailed = summary.failed > 0 && summary.success === 0 && summary.skipped < summary.total
+    const firstError = summary.results.find((r) => !r.success && !r.skipped)?.error
 
     await supabase
       .from('campaigns')
@@ -73,6 +92,7 @@ export async function POST(request: NextRequest) {
       total: summary.total,
       success: summary.success,
       failed: summary.failed,
+      skipped: summary.skipped,
       status: 'sent',
     })
   } catch (error) {

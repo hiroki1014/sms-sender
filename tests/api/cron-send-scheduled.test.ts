@@ -86,6 +86,8 @@ describe('GET /api/cron/send-scheduled', () => {
       total: 2,
       success: 2,
       failed: 0,
+      skipped: 0,
+      isPartial: false,
       results: [
         { phone: '09012345678', success: true },
         { phone: '08012345678', success: true },
@@ -104,10 +106,13 @@ describe('GET /api/cron/send-scheduled', () => {
       failed: 0,
       status: 'sent',
     })
-    expect(mockSendCampaign).toHaveBeenCalledWith({
-      recipients,
-      campaignId: 'c1',
-    })
+    expect(mockSendCampaign).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipients,
+        campaignId: 'c1',
+        deadlineMs: expect.any(Number),
+      })
+    )
   })
 
   it('recipients_snapshot が空なら sendCampaign を呼ばずに sent', async () => {
@@ -133,5 +138,103 @@ describe('GET /api/cron/send-scheduled', () => {
     expect(res.status).toBe(200)
     expect(mockSendCampaign).not.toHaveBeenCalled()
     expect(data.results[0].total).toBe(0)
+  })
+
+  it('isPartial=true の場合は sending のまま保持', async () => {
+    const recipients = [
+      { phone: '09012345678', message: 'msg1' },
+      { phone: '08012345678', message: 'msg2' },
+    ]
+
+    enqueueQueryResult([
+      {
+        id: 'c3',
+        name: '大量送信',
+        message_template: 'test',
+        status: 'scheduled',
+        scheduled_at: '2025-01-01T00:00:00Z',
+        recipients_snapshot: recipients,
+      },
+    ])
+    enqueueQueryResult([{ id: 'c3' }])
+    enqueueQueryResult(null, null)
+
+    mockSendCampaign.mockResolvedValue({
+      total: 1,
+      success: 1,
+      failed: 0,
+      skipped: 0,
+      isPartial: true,
+      results: [{ phone: '09012345678', success: true }],
+    })
+
+    const res = await GET(authedRequest('test-secret'))
+    const data = await res.json()
+
+    expect(data.results[0].status).toBe('sending')
+    expect(data.results[0].success).toBe(1)
+  })
+
+  it('sending キャンペーンを再開できる', async () => {
+    const recipients = [
+      { phone: '09012345678', message: 'msg1' },
+      { phone: '08012345678', message: 'msg2' },
+    ]
+
+    // fetchAll: sending キャンペーン（停滞: 10分前のログ）
+    enqueueQueryResult([
+      {
+        id: 'c4',
+        name: '再開テスト',
+        message_template: 'test',
+        status: 'sending',
+        scheduled_at: '2025-01-01T00:00:00Z',
+        recipients_snapshot: recipients,
+      },
+    ])
+    // 停滞チェック: 10分前のログ
+    enqueueQueryResult({ sent_at: new Date(Date.now() - 10 * 60 * 1000).toISOString() })
+    // finalize update
+    enqueueQueryResult(null, null)
+
+    mockSendCampaign.mockResolvedValue({
+      total: 2,
+      success: 1,
+      failed: 0,
+      skipped: 1,
+      isPartial: false,
+      results: [
+        { phone: '09012345678', success: true, skipped: true, skipReason: '送信済み' },
+        { phone: '08012345678', success: true },
+      ],
+    })
+
+    const res = await GET(authedRequest('test-secret'))
+    const data = await res.json()
+
+    expect(data.processed).toBe(1)
+    expect(data.results[0].status).toBe('sent')
+    expect(mockSendCampaign).toHaveBeenCalled()
+  })
+
+  it('sending キャンペーンでも最新ログが5分以内ならスキップする', async () => {
+    enqueueQueryResult([
+      {
+        id: 'c5',
+        name: '処理中',
+        message_template: 'test',
+        status: 'sending',
+        scheduled_at: '2025-01-01T00:00:00Z',
+        recipients_snapshot: [{ phone: '09012345678', message: 'msg1' }],
+      },
+    ])
+    // 停滞チェック: 1分前のログ（5分以内 → スキップ）
+    enqueueQueryResult({ sent_at: new Date(Date.now() - 1 * 60 * 1000).toISOString() })
+
+    const res = await GET(authedRequest('test-secret'))
+    const data = await res.json()
+
+    expect(data.processed).toBe(0)
+    expect(mockSendCampaign).not.toHaveBeenCalled()
   })
 })
